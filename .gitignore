@@ -157,6 +157,7 @@ ENV/
 env.bak/
 venv.bak/
 .venv/
+~$*.xlsx
 
 # Spyder project settings
 .spyderproject
