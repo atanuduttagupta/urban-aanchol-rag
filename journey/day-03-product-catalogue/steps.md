@@ -2,52 +2,15 @@
 
 ## Objective
 
-Define the rules for converting the Urban Aanchol Excel catalogue into clean,
-consistent product records that can later be loaded into PostgreSQL and used
-by search and RAG.
+Establish the foundation for the Urban Aanchol product catalogue and define a clean, repeatable data contract that can later feed the website, database, search, and RAG chatbot.
 
-## Step 1 — Confirm the source of truth
+## Completed Steps
 
-The Urban Aanchol product catalogue is maintained primarily in Excel.
+### 1. Finalize catalogue scope
 
-Excel is the business-friendly source of truth.
+The catalogue is an **Urban Aanchol Product Catalogue**, not a saree-only catalogue.
 
-The application database will be a derived/operational copy used by the
-website, search, chatbot, and RAG system.
-
----
-
-## Step 2 — Product ID
-
-`product_id` must uniquely identify a product.
-
-Example:
-
-- UA-0001
-- UA-0002
-- UA-0003
-
-Once assigned, a product ID should not be casually reused for another product.
-
----
-
-## Step 3 — Required vs optional fields
-
-Core fields such as product ID, product name, category, price, availability,
-and description should normally be populated.
-
-Optional fields such as brand, collection, pattern, border, video URL,
-and remarks may be blank when they are not applicable.
-
-A blank value is preferable to invented information.
-
----
-
-## Step 4 — Category
-
-`category` determines the type of product.
-
-Examples:
+Supported/current and future categories include:
 
 - Saree
 - Blouse
@@ -56,134 +19,216 @@ Examples:
 - Accessories
 - Other
 
-Category-specific information should not be forced into unrelated fields.
+`category` is a core product attribute.
 
----
+### 2. Finalize the V1 schema
 
-## Step 5 — Multiple values
+The V1 Excel catalogue contains these 24 fields:
 
-The following fields may contain multiple comma-separated values:
+1. `product_id`
+2. `product_name`
+3. `category`
+4. `brand`
+5. `collection`
+6. `fabric`
+7. `colour`
+8. `secondary_colour`
+9. `pattern`
+10. `border`
+11. `occasion`
+12. `style`
+13. `mood`
+14. `tags`
+15. `price`
+16. `availability`
+17. `launch_date`
+18. `created_date`
+19. `last_updated`
+20. `description`
+21. `image_url`
+22. `video_url`
+23. `product_url`
+24. `remarks`
 
-- colour
-- secondary_colour
-- occasion
-- style
-- mood
-- tags
+### 3. Confirm Excel as source of truth
+
+Excel is the business-friendly source of truth for catalogue management.
+
+The application database will later contain a derived/operational copy for:
+
+- Website catalogue
+- Search
+- Recommendations
+- RAG
+- Availability checks
+
+### 4. Product IDs
+
+Every product receives a stable unique `product_id`, such as `UA-0001`.
+
+Product IDs should remain stable even when other product information changes.
+
+### 5. Required and optional fields
+
+Core fields such as product ID, product name, category, price, availability, and description should normally be populated.
+
+Optional fields may be blank when they are not applicable. A blank value is preferable to invented information.
+
+### 6. Multi-value fields
+
+The following Excel fields support comma-separated values:
+
+- `colour`
+- `secondary_colour`
+- `occasion`
+- `style`
+- `mood`
+- `tags`
 
 Example:
 
 `occasion = Durga Puja, Wedding, Party`
 
-Example:
+### 7. Multi-value normalization
 
-`tags = red, festive, traditional, gold border`
+During future import/synchronization:
 
-These values will later be normalized during database/indexing if necessary.
+- commas are treated as separators
+- leading/trailing whitespace is removed
+- empty values are ignored
+- accidental duplicate values are removed
+- original human-friendly capitalization is preserved
+- blank fields remain valid
+- search-specific normalization can be applied separately
 
----
+Excel remains simple and human-readable; structured normalization is handled by the import/data pipeline.
 
-## Step 6 — Price
+### 8. Price
 
 `price` represents the selling price in Indian Rupees.
 
-Use numeric values rather than storing the currency symbol inside the value.
+Excel should contain a numeric value such as `4999`, rather than `₹4,999`.
 
-Example:
+The website can format the value as Indian currency.
 
-`4999`
+Price must be greater than or equal to zero.
 
-not:
+### 9. Availability
 
-`₹4,999`
-
-The website can format the numeric value as Indian currency.
-
----
-
-## Step 7 — Availability
-
-Availability must be explicit.
-
-Possible initial values:
+Initial logical values are:
 
 - Available
 - Sold
 - Reserved
 - Inactive
 
-Only products marked `Available` should normally be recommended as
-currently purchasable.
+Only products marked `Available` should normally be recommended as currently purchasable.
 
----
+### 10. Dates
 
-## Step 8 — Dates
+The catalogue includes:
 
-Use dates consistently:
+- `launch_date`
+- `created_date`
+- `last_updated`
 
-- `launch_date` — when the product/collection was launched
-- `created_date` — when the catalogue record was created
-- `last_updated` — when the catalogue record was last changed
+Dates should be actual Excel dates where possible. The future import pipeline will convert them into standard database date/timestamp representations.
 
----
+### 11. Description and remarks
 
-## Step 9 — Description
+Descriptions should contain useful customer-facing information without unsupported claims.
 
-The description should contain useful customer-facing information.
+`remarks` is for general/internal notes and is not the primary source for structured filtering.
 
-It should describe the product rather than repeat structured fields unnecessarily.
+### 12. Media
 
-Avoid unsupported claims.
-
----
-
-## Step 10 — Remarks
-
-`remarks` is intended for general or internal notes.
-
-It should not become the primary source for structured filtering.
-
-Important customer-facing attributes should have proper catalogue fields.
-
----
-
-## Step 11 — Media
-
-The catalogue stores URLs rather than binary image/video data.
-
-Current fields:
+V1 stores:
 
 - `image_url`
 - `video_url`
 
-Multiple media assets can be supported later through a separate product-media
-structure without changing the core product model.
+Media files are not stored inside the database. Multiple media assets can later use a separate product-media structure.
 
----
+### 13. Data quality and unknown information
 
-## Step 12 — Unknown information
+The system must not invent missing product information.
 
-Never invent catalogue information.
+Future validation must detect:
 
-If information is unknown:
+- invalid prices
+- negative prices
+- invalid dates
+- missing required fields
+- duplicate product IDs
+- invalid availability values
 
-- leave the field blank, or
-- mark it as unavailable where appropriate.
+Invalid records should be reported rather than silently corrected.
 
-The RAG chatbot must not infer unsupported product facts as if they were
-catalogue facts.
+### 14. Category-specific flexibility
 
----
+We will not create many category-specific Excel columns.
 
-## Step 13 — Future flexibility
+Future category-specific attributes can use a flexible PostgreSQL `JSONB` structure rather than continually adding columns to Excel.
 
-Future category-specific attributes will be handled using a flexible structure,
-such as PostgreSQL `JSONB`, rather than continually adding large numbers of
-columns to the Excel catalogue.
+### 15. Excel processing library
 
----
+Python `openpyxl` will be used for `.xlsx` catalogue processing.
+
+It is recorded in:
+
+- `backend/requirements.txt` — direct dependency
+- `backend/requirements-lock.txt` — exact installed environment versions
+
+Excel processing should remain behind an internal import/validation layer so the rest of the system remains independent of the Excel library.
+
+### 16. Vendor independence
+
+The catalogue schema uses standard data concepts and URLs and should remain independent of any particular hosting provider, database provider, vector database, LLM provider, or media provider.
+
+### 17. Future synchronization
+
+The planned flow is:
+
+Excel / Google Sheets
+→ validated product records
+→ PostgreSQL
+→ search/indexing
+→ RAG
+
+The synchronization process should detect additions, updates, and availability changes.
+
+### 18. Dummy catalogue
+
+The current workbook contains dummy commercial information for development.
+
+The supplied product images are real images provided for development, but dummy names, prices, URLs, and other catalogue values must not be treated as production information.
+
+### 19. Manual schema validation
+
+The dummy workbook was manually validated and confirmed to contain:
+
+- 24 expected columns
+- 9 product records
+- 7 Sarees
+- 2 Blouses
+- unique product IDs
+- numeric prices
+- explicit availability values
+
+### 20. Git checkpoint
+
+Day 3 documentation and dependency changes were committed and pushed to GitHub.
+
+The final working tree was verified clean.
 
 ## Completion Criteria
 
-The Excel catalogue has a documented and repeatable interpretation model
-suitable for future database import and RAG indexing.
+Day 3 is complete when the catalogue schema, data rules, dependency decision, and catalogue design decisions are documented; the dummy catalogue exists in the repository; and the changes are committed, pushed, and verified clean.
+
+## Next Day
+
+Day 4 will build the first actual catalogue data-processing layer:
+
+Excel → Excel Reader → Validation → Validation Report
+
+The first goal is reliable data quality before introducing PostgreSQL, vector search, or RAG.
