@@ -85,27 +85,17 @@ Each development day should have:
 
 # 📚 Journey Structure
 
-Each development day is stored in its own folder.
+Each development day is stored in its own file.
 
 ```text
 journey/
 │
-├── README.md
 │
-├── day-01-foundation/
-│   ├── README.md
-│   ├── steps.md
-│   └── decisions.md
+├── day-01-foundation
 │
-├── day-02-project-setup/
-│   ├── README.md
-│   ├── steps.md
-│   └── decisions.md
+├── day-02-project-setup
 │
-├── day-03-product-catalogue/
-│   ├── README.md
-│   ├── steps.md
-│   └── decisions.md
+├── day-03-product-catalogue
 │
 └── ...
 ```
