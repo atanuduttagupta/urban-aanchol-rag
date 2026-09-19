@@ -1,8 +1,10 @@
-from backend.app.database.connection import get_database_connection
+from psycopg import Connection
+
+from backend.app.database.embedding_config import MODEL_NAME, MODEL_VERSION
 
 
 def search_similar_products(
-    connection,
+    connection: Connection,
     query_embedding: list[float],
     limit: int = 5,
 ) -> list[dict]:
@@ -25,16 +27,13 @@ def search_similar_products(
         LIMIT %s;
     """
 
-    model_name = "sentence-transformers/all-MiniLM-L6-v2"
-    model_version = "v1"
-
     with connection.cursor() as cursor:
         cursor.execute(
             query,
             (
                 query_embedding,
-                model_name,
-                model_version,
+                MODEL_NAME,
+                MODEL_VERSION,
                 query_embedding,
                 limit,
             ),
