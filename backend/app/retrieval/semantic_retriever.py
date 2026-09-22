@@ -2,7 +2,11 @@ from psycopg import Connection
 
 from backend.app.database.embedding_generator import EmbeddingGenerator
 from backend.app.database.vector_search import search_similar_products
-from backend.app.retrieval.models import ProductResult, RetrievalRequest
+from backend.app.retrieval.models import (
+    ProductResult,
+    RetrievalPolicy,
+    RetrievalRequest,
+)
 
 
 class SemanticProductRetriever:
@@ -14,13 +18,18 @@ class SemanticProductRetriever:
         self.connection = connection
         self.embedding_generator = embedding_generator
 
-    def retrieve(self, request: RetrievalRequest) -> list[ProductResult]:
+    def retrieve(
+        self,
+        request: RetrievalRequest,
+        policy: RetrievalPolicy,
+    ) -> list[ProductResult]:
         query_embedding = self.embedding_generator.generate(request.query)
 
         rows = search_similar_products(
             self.connection,
             query_embedding,
-            limit=request.limit,
+            limit=policy.fusion_window,
+            filters=request.filters,
         )
 
         return [

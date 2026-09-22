@@ -1,23 +1,28 @@
 from backend.app.database.connection import get_database_connection
-from backend.app.retrieval.keyword_retriever import KeywordProductRetriever
+from backend.app.database.embedding_generator import EmbeddingGenerator
 from backend.app.retrieval.models import (
     RetrievalPolicy,
     RetrievalRequest,
 )
+from backend.app.retrieval.semantic_retriever import SemanticProductRetriever
 
 
-def test_keyword_retrieval_with_filters():
+def test_semantic_retrieval_with_filters():
     connection = get_database_connection()
 
     try:
-        retriever = KeywordProductRetriever(connection)
+        retriever = SemanticProductRetriever(
+            connection=connection,
+            embedding_generator=EmbeddingGenerator(),
+        )
 
         request = RetrievalRequest(
-            query="handloom saree",
+            query="Something elegant for a family function",
             limit=5,
             filters={
                 "category": "Saree",
                 "availability": "Available",
+                "max_price": 3000,
             },
         )
 
@@ -32,18 +37,27 @@ def test_keyword_retrieval_with_filters():
         )
 
         assert results
+
         assert all(
             result.category == "Saree"
             for result in results
         )
+
         assert all(
             result.availability == "Available"
             for result in results
         )
+
         assert all(
-            result.retrieval_method == "keyword"
+            result.price <= 3000
             for result in results
         )
+
+        assert all(
+            result.retrieval_method == "semantic"
+            for result in results
+        )
+
         assert all(
             result.score is not None
             for result in results

@@ -1,13 +1,19 @@
+from typing import Any
+
 from psycopg import Connection
 
 from backend.app.database.embedding_config import MODEL_NAME, MODEL_VERSION
+from backend.app.retrieval.filters import build_product_filter_sql
 
 
 def search_similar_products(
     connection: Connection,
     query_embedding: list[float],
     limit: int = 5,
+    filters: dict[str, Any] | None = None,
 ) -> list[dict]:
+    filter_sql, filter_parameters = build_product_filter_sql(filters)
+
     query = """
         SELECT
             p.product_id,
@@ -22,23 +28,30 @@ def search_similar_products(
         WHERE
             pe.model_name = %s
             AND pe.model_version = %s
-            AND p.availability = 'Available'
+    """
+
+    query += filter_sql
+
+    query += """
         ORDER BY pe.embedding <=> %s::vector
         LIMIT %s;
     """
 
-    with connection.cursor() as cursor:
-        cursor.execute(
-            query,
-            (
-                query_embedding,
-                MODEL_NAME,
-                MODEL_VERSION,
-                query_embedding,
-                limit,
-            ),
-        )
+    parameters: list[object] = [
+        query_embedding,
+        MODEL_NAME,
+        MODEL_VERSION,
+    ]
 
+    parameters.extend(filter_parameters)
+
+    parameters.extend([
+        query_embedding,
+        limit,
+    ])
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, parameters)
         rows = cursor.fetchall()
 
     return [

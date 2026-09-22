@@ -11,7 +11,7 @@ CATALOGUE_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"
     / "catalogue"
-    / "products_dummy.xlsx"
+    / "products_dummy_v1.0.xlsx"
 )
 
 

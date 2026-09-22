@@ -1,35 +1,25 @@
 from backend.app.database.connection import get_database_connection
-from backend.app.retrieval.keyword_retriever import KeywordProductRetriever
-from backend.app.retrieval.models import (
-    RetrievalPolicy,
-    RetrievalRequest,
-)
+from backend.app.retrieval.metadata_retriever import MetadataProductRetriever
+from backend.app.retrieval.models import RetrievalRequest
 
 
-def test_keyword_retrieval_with_filters():
+def test_metadata_retrieval_with_filters():
     connection = get_database_connection()
 
     try:
-        retriever = KeywordProductRetriever(connection)
+        retriever = MetadataProductRetriever(connection)
 
         request = RetrievalRequest(
-            query="handloom saree",
+            query="",
             limit=5,
             filters={
                 "category": "Saree",
                 "availability": "Available",
+                "max_price": 3000,
             },
         )
 
-        policy = RetrievalPolicy(
-            fusion_window=5,
-            rrf_k=60,
-        )
-
-        results = retriever.retrieve(
-            request,
-            policy,
-        )
+        results = retriever.retrieve(request)
 
         assert results
         assert all(
@@ -41,11 +31,11 @@ def test_keyword_retrieval_with_filters():
             for result in results
         )
         assert all(
-            result.retrieval_method == "keyword"
+            result.price <= 3000
             for result in results
         )
         assert all(
-            result.score is not None
+            result.retrieval_method == "metadata"
             for result in results
         )
 

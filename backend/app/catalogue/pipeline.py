@@ -9,10 +9,17 @@ def load_catalogue(file_path: str) -> list[dict]:
     """
     Read, validate, and normalize the product catalogue.
 
-    The pipeline stops if validation errors are found.
+    Reserved catalogue rows without a product name are ignored.
+    Active product rows are validated strictly.
     """
 
     headers, products = read_products(file_path)
+
+    products = [
+        product
+        for product in products
+        if product.get("product_id") and product.get("product_name")
+    ]
 
     errors = validate_products(products, headers)
 
@@ -34,7 +41,7 @@ def load_default_catalogue() -> list[dict]:
         Path(__file__).resolve().parents[3]
         / "data"
         / "catalogue"
-        / "products_dummy.xlsx"
+        / "products_dummy_v1.1.xlsx"
     )
 
     return load_catalogue(str(catalogue_path))
