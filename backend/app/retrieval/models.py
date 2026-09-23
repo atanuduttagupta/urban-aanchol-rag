@@ -3,6 +3,28 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class RetrievalIntent:
+    """
+    Structured interpretation of a customer's product-search request.
+
+    `original_query` preserves the customer's original message.
+
+    `semantic_query` contains the natural-language portion intended
+    for keyword and semantic retrieval.
+
+    `filters` contains structured constraints extracted from the request.
+
+    `requested_limit` contains an explicit number requested by the
+    customer, if one was provided. It is not a default display limit.
+    """
+
+    original_query: str
+    semantic_query: str
+    filters: dict[str, Any] | None = None
+    requested_limit: int | None = None
+
+
+@dataclass(frozen=True)
 class RetrievalRequest:
     """
     User-facing retrieval request.

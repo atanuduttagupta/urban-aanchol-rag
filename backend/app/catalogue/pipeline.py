@@ -1,5 +1,4 @@
-from pathlib import Path
-
+from .config import CATALOGUE_PATH
 from .excel_reader import read_products
 from .normalizer import normalize_products
 from .validator import validate_products
@@ -35,13 +34,6 @@ def load_catalogue(file_path: str) -> list[dict]:
 
 
 def load_default_catalogue() -> list[dict]:
-    """Load the default Urban Aanchol catalogue."""
+    """Load the configured default Urban Aanchol catalogue."""
 
-    catalogue_path = (
-        Path(__file__).resolve().parents[3]
-        / "data"
-        / "catalogue"
-        / "products_dummy_v1.1.xlsx"
-    )
-
-    return load_catalogue(str(catalogue_path))
+    return load_catalogue(str(CATALOGUE_PATH))

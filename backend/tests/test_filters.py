@@ -107,3 +107,39 @@ def test_price_range_filters():
     assert "p.price <= %s" in sql
 
     assert parameters == [1500, 3000]
+
+
+def test_multiple_values_within_normalized_filter_use_or():
+    sql, parameters = build_product_filter_sql(
+        {
+            "mood": ["Elegant", "Vibrant"],
+        }
+    )
+
+    assert sql.count("FROM product_moods attribute") == 1
+    assert sql.count("attribute.mood ILIKE %s") == 2
+
+    assert parameters == [
+        "%Elegant%",
+        "%Vibrant%",
+    ]
+
+
+def test_multiple_values_across_filters_use_and():
+    sql, parameters = build_product_filter_sql(
+        {
+            "occasion": "Wedding",
+            "mood": ["Elegant", "Vibrant"],
+        }
+    )
+
+    assert "FROM product_occasions attribute" in sql
+    assert "FROM product_moods attribute" in sql
+
+    assert sql.count("attribute.mood ILIKE %s") == 2
+
+    assert parameters == [
+        "%Wedding%",
+        "%Elegant%",
+        "%Vibrant%",
+    ]

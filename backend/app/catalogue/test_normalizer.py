@@ -1,15 +1,6 @@
-from pathlib import Path
-
+from backend.app.catalogue.config import CATALOGUE_PATH
 from backend.app.catalogue.excel_reader import read_products
 from backend.app.catalogue.normalizer import normalize_products
-
-
-CATALOGUE_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "catalogue"
-    / "products_dummy.xlsx"
-)
 
 
 headers, products = read_products(str(CATALOGUE_PATH))

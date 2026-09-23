@@ -61,18 +61,30 @@ def build_product_filter_sql(
     for filter_name, table_name in NORMALIZED_FILTER_TABLES.items():
         value = filters.get(filter_name)
 
-        if value is not None:
-            conditions.append(
-                f"""
-                EXISTS (
-                    SELECT 1
-                    FROM {table_name} attribute
-                    WHERE attribute.product_id = p.product_id
-                      AND attribute.{filter_name} ILIKE %s
-                )
-                """
+        if value is None:
+            continue
+
+        values = value if isinstance(value, list) else [value]
+
+        value_conditions = []
+        for item in values:
+            value_conditions.append(
+                f"attribute.{filter_name} ILIKE %s"
             )
-            parameters.append(f"%{value}%")
+            parameters.append(f"%{item}%")
+
+        conditions.append(
+            f"""
+            EXISTS (
+                SELECT 1
+                FROM {table_name} attribute
+                WHERE attribute.product_id = p.product_id
+                AND (
+                    {" OR ".join(value_conditions)}
+                )
+            )
+            """
+        )
 
     if not conditions:
         return "", parameters
