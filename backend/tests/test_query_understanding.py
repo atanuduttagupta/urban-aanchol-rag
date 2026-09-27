@@ -257,3 +257,54 @@ def test_understand_query_extracts_polite_result_limit():
     }
 
     assert intent.requested_limit == 6
+
+def test_understand_query_extracts_limit_and_max_price():
+    query = "Show me 5 silk sarees under 3000"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "fabric": "Silk",
+        "max_price": 3000.0,
+    }
+
+    assert intent.requested_limit == 5
+
+
+def test_understand_query_extracts_limit_and_price_range():
+    query = "Show me 4 blue sarees between 2000 and 4000"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "colour": "Blue",
+        "min_price": 2000.0,
+        "max_price": 4000.0,
+    }
+
+    assert intent.requested_limit == 4
+
+
+def test_understand_query_does_not_invent_unknown_attribute():
+    query = "I want a graceful saree for my sister's wedding"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "occasion": "Wedding",
+    }
+
+    assert intent.semantic_query == query
+    assert intent.requested_limit is None
