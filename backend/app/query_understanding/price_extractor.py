@@ -1,6 +1,5 @@
 import re
 
-
 _PRICE = r"(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d{1,2})?)"
 
 
@@ -28,7 +27,7 @@ def extract_price_filters(query: str) -> dict[str, float]:
         return filters
 
     max_match = re.search(
-        rf"\b(?:under|below|less\s+than|up\s+to)\s+{_PRICE}\b",
+        rf"\b(?:under|below|less\s+than|up\s+to|not\s+exceeding)\s+{_PRICE}\b",
         query,
         flags=re.IGNORECASE,
     )

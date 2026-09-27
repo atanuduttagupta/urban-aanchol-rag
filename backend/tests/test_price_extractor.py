@@ -55,3 +55,52 @@ def test_no_price_constraint():
     assert extract_price_filters(
         "I want something elegant for a wedding"
     ) == {}
+
+def test_extracts_not_exceeding_max_price():
+    result = extract_price_filters(
+        "Show me sarees not exceeding ₹3000"
+    )
+
+    assert result == {
+        "max_price": 3000.0,
+    }
+
+
+def test_extracts_below_price_with_comma():
+    result = extract_price_filters(
+        "Show me sarees below ₹3,000"
+    )
+
+    assert result == {
+        "max_price": 3000.0,
+    }
+
+
+def test_extracts_up_to_price_with_comma():
+    result = extract_price_filters(
+        "Show me sarees up to ₹3,000"
+    )
+
+    assert result == {
+        "max_price": 3000.0,
+    }
+
+
+def test_extracts_between_price_with_currency_symbols():
+    result = extract_price_filters(
+        "Show me sarees between ₹2,000 and ₹4,000"
+    )
+
+    assert result == {
+        "min_price": 2000.0,
+        "max_price": 4000.0,
+    }
+
+def test_extracts_not_exceeding_without_currency_symbol():
+    result = extract_price_filters(
+        "Show me sarees not exceeding 3000"
+    )
+
+    assert result == {
+        "max_price": 3000.0,
+    }

@@ -226,3 +226,19 @@ def test_understand_query_prefers_specific_catalogue_value():
         "category": "Saree",
         "colour": "Light Blue",
     }
+
+def test_understand_query_extracts_not_exceeding_price():
+    query = "Show me silk sarees not exceeding ₹3000"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "fabric": "Silk",
+        "max_price": 3000.0,
+    }
+
+    assert intent.requested_limit is None
