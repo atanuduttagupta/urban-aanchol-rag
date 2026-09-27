@@ -2,7 +2,6 @@ from backend.app.query_understanding.attribute_matcher import (
     match_catalogue_attributes,
 )
 
-
 VOCABULARY = {
     "occasion": [
         "Wedding",
@@ -86,6 +85,7 @@ def test_empty_vocabulary_returns_no_matches():
 
     assert matches == {}
 
+
 def test_matches_new_catalogue_values_without_code_changes():
     vocabulary = {
         "colour": ["Blue", "Wine"],
@@ -100,4 +100,61 @@ def test_matches_new_catalogue_values_without_code_changes():
     assert result == {
         "colour": ["Wine"],
         "mood": ["Romantic"],
+    }
+
+
+def test_prefers_specific_catalogue_value_when_matches_overlap():
+    vocabulary = {
+        "colour": [
+            "Blue",
+            "Light Blue",
+            "Dark Blue",
+        ],
+    }
+
+    result = match_catalogue_attributes(
+        "Show me light blue sarees",
+        vocabulary,
+    )
+
+    assert result == {
+        "colour": ["Light Blue"],
+    }
+
+
+def test_preserves_distinct_non_overlapping_catalogue_values():
+    vocabulary = {
+        "colour": [
+            "Blue",
+            "Light Blue",
+            "Red",
+        ],
+    }
+
+    result = match_catalogue_attributes(
+        "Show me blue and light blue sarees",
+        vocabulary,
+    )
+
+    assert result == {
+        "colour": ["Blue", "Light Blue"],
+    }
+
+
+def test_prefers_specific_catalogue_value_for_another_overlapping_phrase():
+    vocabulary = {
+        "colour": [
+            "Blue",
+            "Light Blue",
+            "Dark Blue",
+        ],
+    }
+
+    result = match_catalogue_attributes(
+        "I want a dark blue saree",
+        vocabulary,
+    )
+
+    assert result == {
+        "colour": ["Dark Blue"],
     }

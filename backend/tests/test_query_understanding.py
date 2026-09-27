@@ -2,7 +2,6 @@ from backend.app.query_understanding.query_understanding import (
     understand_query,
 )
 
-
 VOCABULARY = {
     "category": ["Saree", "Blouse"],
     "brand": ["Brand A", "Brand B"],
@@ -120,6 +119,7 @@ def test_understand_query_returns_empty_filters_when_nothing_is_detected():
     assert intent.filters is None
     assert intent.requested_limit is None
 
+
 def test_understand_query_extracts_all_constraints_from_realistic_request():
     query = "Show me 5 elegant blue cotton sarees under 3000"
 
@@ -141,3 +141,88 @@ def test_understand_query_extracts_all_constraints_from_realistic_request():
     }
 
     assert intent.requested_limit == 5
+
+
+def test_understand_query_extracts_price_range_with_attributes():
+    query = "Show me silk sarees between 2000 and 4000"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "fabric": "Silk",
+        "min_price": 2000.0,
+        "max_price": 4000.0,
+    }
+
+    assert intent.requested_limit is None
+
+
+def test_understand_query_extracts_quantity_from_natural_request():
+    query = "I need 5 blue sarees"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "colour": "Blue",
+    }
+
+    assert intent.requested_limit == 5
+
+
+def test_understand_query_does_not_infer_limit_from_qualitative_quantity():
+    query = "I need a few blue sarees"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "colour": "Blue",
+    }
+
+    assert intent.requested_limit is None
+
+
+def test_understand_query_extracts_limit_from_polite_request():
+    query = "Can you show me 4 blue sarees?"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "colour": "Blue",
+    }
+
+    assert intent.requested_limit == 4
+
+
+def test_understand_query_prefers_specific_catalogue_value():
+    vocabulary = {
+        **VOCABULARY,
+        "colour": ["Blue", "Light Blue", "Dark Blue"],
+    }
+
+    query = "Show me light blue sarees"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=vocabulary,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "colour": "Light Blue",
+    }
