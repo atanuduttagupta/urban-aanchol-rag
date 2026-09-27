@@ -242,3 +242,18 @@ def test_understand_query_extracts_not_exceeding_price():
     }
 
     assert intent.requested_limit is None
+
+def test_understand_query_extracts_polite_result_limit():
+    query = "Please show me 6 blue sarees"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "colour": "Blue",
+    }
+
+    assert intent.requested_limit == 6
