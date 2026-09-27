@@ -194,3 +194,51 @@ def test_query_pipeline_caller_limit_is_used_when_customer_did_not_request_one(
     )
 
     assert hybrid.received_request.limit == 9
+
+def test_query_pipeline_customer_limit_takes_precedence_over_caller_limit(
+    monkeypatch,
+):
+    hybrid = StubHybridRetriever([])
+    policy = RetrievalPolicy(
+        fusion_window=10,
+        rrf_k=60,
+    )
+
+    def fake_get_catalogue_vocabulary(connection):
+        return {
+            "category": ["Saree"],
+        }
+
+    def fake_understand_query(query, vocabulary):
+        from backend.app.retrieval.models import RetrievalIntent
+
+        return RetrievalIntent(
+            original_query=query,
+            semantic_query=query,
+            filters={"category": "Saree"},
+            requested_limit=8,
+        )
+
+    monkeypatch.setattr(
+        "backend.app.retrieval.query_pipeline.get_catalogue_vocabulary",
+        fake_get_catalogue_vocabulary,
+    )
+
+    monkeypatch.setattr(
+        "backend.app.retrieval.query_pipeline.understand_query",
+        fake_understand_query,
+    )
+
+    pipeline = QueryPipeline(
+        connection=StubConnection(),
+        hybrid_retriever=hybrid,
+        policy=policy,
+        default_limit=5,
+    )
+
+    pipeline.retrieve(
+        "Show me 8 sarees",
+        limit=3,
+    )
+
+    assert hybrid.received_request.limit == 8
