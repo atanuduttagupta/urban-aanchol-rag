@@ -5,6 +5,7 @@ from backend.app.retrieval.models import RetrievalIntent
 from .attribute_matcher import match_catalogue_attributes
 from .limit_extractor import extract_requested_limit
 from .price_extractor import extract_price_filters
+from .retrieval_safety import detect_retrieval_safety
 
 
 def understand_query(
@@ -36,10 +37,14 @@ def understand_query(
             filters[attribute_name] = values
 
     price_filters = extract_price_filters(query)
-
     filters.update(price_filters)
 
     requested_limit = extract_requested_limit(
+        query=query,
+        vocabulary=vocabulary,
+    )
+
+    retrieval_safety = detect_retrieval_safety(
         query=query,
         vocabulary=vocabulary,
     )
@@ -49,4 +54,5 @@ def understand_query(
         semantic_query=query,
         filters=filters or None,
         requested_limit=requested_limit,
+        retrieval_safety=retrieval_safety,
     )

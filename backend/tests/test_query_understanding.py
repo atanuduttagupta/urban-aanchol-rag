@@ -17,6 +17,13 @@ VOCABULARY = {
     "tag": ["Handloom", "Festive"],
 }
 
+TEST_VOCABULARY = {
+    "colour": ["Red", "Blue", "Green"],
+    "fabric": ["Silk", "Cotton"],
+    "border": ["Zari"],
+    "occasion": ["Wedding", "Durga Puja"],
+}
+
 
 def test_understand_query_extracts_attributes_and_price():
     query = "I want an elegant blue cotton saree for a wedding under 3000"
@@ -227,6 +234,7 @@ def test_understand_query_prefers_specific_catalogue_value():
         "colour": "Light Blue",
     }
 
+
 def test_understand_query_extracts_not_exceeding_price():
     query = "Show me silk sarees not exceeding ₹3000"
 
@@ -243,6 +251,7 @@ def test_understand_query_extracts_not_exceeding_price():
 
     assert intent.requested_limit is None
 
+
 def test_understand_query_extracts_polite_result_limit():
     query = "Please show me 6 blue sarees"
 
@@ -257,6 +266,7 @@ def test_understand_query_extracts_polite_result_limit():
     }
 
     assert intent.requested_limit == 6
+
 
 def test_understand_query_extracts_limit_and_max_price():
     query = "Show me 5 silk sarees under 3000"
@@ -308,3 +318,47 @@ def test_understand_query_does_not_invent_unknown_attribute():
 
     assert intent.semantic_query == query
     assert intent.requested_limit is None
+
+
+def test_query_understanding_includes_retrieval_safety() -> None:
+    result = understand_query(
+        query="Show me something cheaper than the one you showed earlier",
+        vocabulary=TEST_VOCABULARY,
+    )
+
+    assert result.retrieval_safety is not None
+    assert result.retrieval_safety.retrieval_safe is False
+    assert "comparison_detected" in result.retrieval_safety.signals
+
+
+def test_query_understanding_marks_normal_query_retrieval_safe() -> None:
+    result = understand_query(
+        query="Show me 5 blue silk sarees under ₹3000",
+        vocabulary=TEST_VOCABULARY,
+    )
+
+    assert result.retrieval_safety is not None
+    assert result.retrieval_safety.retrieval_safe is True
+    assert result.retrieval_safety.signals == ()
+
+
+def test_understand_query_extracts_quantity_from_i_need_request():
+    query = "I need 5 blue sarees"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.requested_limit == 5
+
+
+def test_understand_query_extracts_quantity_from_i_want_request():
+    query = "I want 4 blue sarees"
+
+    intent = understand_query(
+        query=query,
+        vocabulary=VOCABULARY,
+    )
+
+    assert intent.requested_limit == 4

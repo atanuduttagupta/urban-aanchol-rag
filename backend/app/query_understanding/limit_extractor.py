@@ -47,6 +47,8 @@ def extract_requested_limit(
         r"\bfind\s+(\d+)",
         r"\blist\s+(\d+)",
         r"\btop\s+(\d+)",
+        r"\bi\s+need\s+(\d+)",
+        r"\bi\s+want\s+(\d+)",
     )
 
     for pattern in patterns:
@@ -74,11 +76,10 @@ def extract_requested_limit(
             for length in range(1, len(words) + 1):
                 candidate = " ".join(words[:length])
 
-                if _matches_catalogue_value(
-                    candidate,
-                    vocabulary,
-                ):
-                    if value > 0:
-                        return value
+            if _matches_catalogue_value(
+                candidate,
+                vocabulary,
+            ) and value > 0:
+                return value
 
     return None

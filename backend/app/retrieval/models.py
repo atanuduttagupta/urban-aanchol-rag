@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from backend.app.query_understanding.retrieval_safety import RetrievalSafety
+
 
 @dataclass(frozen=True)
 class RetrievalIntent:
@@ -22,6 +24,7 @@ class RetrievalIntent:
     semantic_query: str
     filters: dict[str, Any] | None = None
     requested_limit: int | None = None
+    retrieval_safety: RetrievalSafety | None = None
 
 
 @dataclass(frozen=True)
