@@ -109,3 +109,73 @@ def test_missing_safety_information_is_ambiguous() -> None:
     )
 
     assert result.status == ResolutionStatus.AMBIGUOUS
+
+
+
+def test_second_result_follow_up_is_resolved() -> None:
+    intent = RetrievalIntent(
+        original_query="Show me the second one",
+        semantic_query="Show me the second one",
+        retrieval_safety=RetrievalSafety(
+            retrieval_safe=False,
+            signals=("conversational_reference_detected",),
+        ),
+    )
+    context = ConversationContext(
+        last_result_ids=("UA-0024", "UA-0018", "UA-0012"),
+    )
+
+    result = resolve_retrieval_ambiguity(
+        intent=intent,
+        context=context,
+    )
+
+    assert result.status == ResolutionStatus.RESOLVED
+    assert result.resolved_product_id == "UA-0018"
+
+
+def test_missing_third_result_remains_ambiguous() -> None:
+    intent = RetrievalIntent(
+        original_query="Show me the third one",
+        semantic_query="Show me the third one",
+        retrieval_safety=RetrievalSafety(
+            retrieval_safe=False,
+            signals=("conversational_reference_detected",),
+        ),
+    )
+    context = ConversationContext(
+        last_result_ids=("UA-0024", "UA-0018"),
+    )
+
+    result = resolve_retrieval_ambiguity(
+        intent=intent,
+        context=context,
+    )
+
+    assert result.status == ResolutionStatus.AMBIGUOUS
+    assert result.resolved_product_id is None
+
+
+def test_combined_price_comparison_is_not_simplified() -> None:
+    intent = RetrievalIntent(
+        original_query="Something cheaper than the second one",
+        semantic_query="Something cheaper than the second one",
+        retrieval_safety=RetrievalSafety(
+            retrieval_safe=False,
+            signals=(
+                "conversational_reference_detected",
+                "comparison_detected",
+            ),
+        ),
+    )
+    context = ConversationContext(
+        last_result_ids=("UA-0024", "UA-0018"),
+    )
+
+    result = resolve_retrieval_ambiguity(
+        intent=intent,
+        context=context,
+    )
+
+    assert result.status == ResolutionStatus.AMBIGUOUS
+    assert result.resolved_product_id is None

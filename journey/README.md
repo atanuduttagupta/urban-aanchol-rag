@@ -129,6 +129,8 @@ This keeps **daily activities** separate from the **long-term issue/solution kno
 | Day 4 | Media Management | ⬜ Planned |
 | Day 5 | Website Foundation | ⬜ Planned |
 | Day 6+ | Website Development | ⬜ Planned |
+| Day 11 | Recommendation Engine | 🟢 Complete |
+| Day 12 | Conversational Follow-ups & Context-aware Resolution | 🟡 In Progress |
 | Phase 3 | RAG MVP | ⬜ Planned |
 | Phase 4 | Hybrid Search & Recommendation Agent | ⬜ Planned |
 | Phase 5 | Conversational Recommendation | ⬜ Planned |
