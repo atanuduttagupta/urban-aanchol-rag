@@ -143,3 +143,32 @@ def test_multiple_values_across_filters_use_and():
         "%Elegant%",
         "%Vibrant%",
     ]
+
+
+def test_empty_product_exclusions():
+    from backend.app.retrieval.filters import build_product_exclusion_sql
+
+    sql, parameters = build_product_exclusion_sql(())
+
+    assert sql == ""
+    assert parameters == []
+
+
+def test_product_exclusions_use_parameterized_sql():
+    from backend.app.retrieval.filters import build_product_exclusion_sql
+
+    sql, parameters = build_product_exclusion_sql(
+        ("UA-0001", "UA-0002")
+    )
+
+    assert "p.product_id NOT IN (%s, %s)" in sql
+    assert parameters == ["UA-0001", "UA-0002"]
+
+
+def test_single_product_exclusion():
+    from backend.app.retrieval.filters import build_product_exclusion_sql
+
+    sql, parameters = build_product_exclusion_sql(("UA-0001",))
+
+    assert "p.product_id NOT IN (%s)" in sql
+    assert parameters == ["UA-0001"]

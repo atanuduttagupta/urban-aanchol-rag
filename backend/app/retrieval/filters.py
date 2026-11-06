@@ -1,6 +1,5 @@
 from typing import Any
 
-
 EXACT_FILTER_COLUMNS = {
     "category": "p.category",
     "availability": "p.availability",
@@ -95,3 +94,19 @@ def build_product_filter_sql(
     )
 
     return sql, parameters
+
+
+def build_product_exclusion_sql(
+    excluded_product_ids: tuple[str, ...],
+) -> tuple[str, list[object]]:
+    """Build parameterized SQL to exclude previously displayed products."""
+    if not excluded_product_ids:
+        return "", []
+
+    placeholders = ", ".join(
+        "%s" for _ in excluded_product_ids
+    )
+
+    sql = f" AND p.product_id NOT IN ({placeholders})"
+
+    return sql, list(excluded_product_ids)

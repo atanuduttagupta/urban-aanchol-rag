@@ -6,6 +6,7 @@ def test_default_conversation_context_is_empty() -> None:
 
     assert context.previous_query is None
     assert context.last_result_ids == ()
+    assert context.shown_product_ids == ()
     assert context.selected_product_id is None
 
 
@@ -17,11 +18,21 @@ def test_conversation_context_stores_retrieval_references() -> None:
             "UA-0018",
             "UA-0012",
         ),
+        shown_product_ids=(
+            "UA-0024",
+            "UA-0018",
+            "UA-0012",
+        ),
         selected_product_id="UA-0024",
     )
 
     assert context.previous_query == "Show me blue silk sarees"
     assert context.last_result_ids == (
+        "UA-0024",
+        "UA-0018",
+        "UA-0012",
+    )
+    assert context.shown_product_ids == (
         "UA-0024",
         "UA-0018",
         "UA-0012",

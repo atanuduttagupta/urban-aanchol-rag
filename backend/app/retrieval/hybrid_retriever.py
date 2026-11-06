@@ -51,8 +51,11 @@ class HybridProductRetriever:
 
             for rank, result in enumerate(results, start=1):
 
-                # Ignore products that fail eligibility.
-                if result.product_id not in eligible_ids:
+                # Ignore products that fail eligibility or were already displayed.
+                if (
+                    result.product_id not in eligible_ids
+                    or result.product_id in request.exclude_product_ids
+                ):
                     continue
 
                 # Reciprocal Rank Fusion contribution.

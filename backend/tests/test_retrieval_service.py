@@ -153,3 +153,29 @@ def test_ambiguous_query_uses_injected_llm_resolver() -> None:
 
     llm_resolver.resolve.assert_called_once()
     hybrid_retriever.retrieve.assert_called_once()
+
+
+def test_shown_products_are_excluded_from_discovery_request() -> None:
+    service, hybrid_retriever, _ = build_service()
+
+    hybrid_retriever.retrieve.return_value = []
+
+    context = ConversationContext(
+        shown_product_ids=("UA-0001", "UA-0002", "UA-0003"),
+    )
+
+    result = service.retrieve(
+        query="show me blue silk sarees",
+        context=context,
+        vocabulary=VOCABULARY,
+    )
+
+    assert result.status == RetrievalExecutionStatus.COMPLETED
+
+    request = hybrid_retriever.retrieve.call_args.kwargs["request"]
+
+    assert request.exclude_product_ids == (
+        "UA-0001",
+        "UA-0002",
+        "UA-0003",
+    )

@@ -11,6 +11,9 @@ class ConversationContext:
     `last_result_ids` stores the ordered product IDs from the most
     recently displayed retrieval result set.
 
+    `shown_product_ids` stores unique product IDs already displayed
+    during the current conversation, up to the configured history limit.
+
     `selected_product_id` stores the product explicitly selected by
     the customer, when available.
 
@@ -21,4 +24,5 @@ class ConversationContext:
 
     previous_query: str | None = None
     last_result_ids: tuple[str, ...] = ()
+    shown_product_ids: tuple[str, ...] = ()
     selected_product_id: str | None = None

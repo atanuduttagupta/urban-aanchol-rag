@@ -30,6 +30,7 @@ class SemanticProductRetriever:
             query_embedding,
             limit=policy.fusion_window,
             filters=request.filters,
+            exclude_product_ids=request.exclude_product_ids,
         )
 
         return [

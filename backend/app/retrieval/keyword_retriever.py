@@ -1,6 +1,9 @@
 from psycopg import Connection
 
-from backend.app.retrieval.filters import build_product_filter_sql
+from backend.app.retrieval.filters import (
+    build_product_exclusion_sql,
+    build_product_filter_sql,
+)
 from backend.app.retrieval.models import (
     ProductResult,
     RetrievalPolicy,
@@ -44,8 +47,14 @@ class KeywordProductRetriever:
             request.filters
         )
 
-        query += filter_sql
+        exclusion_sql, exclusion_parameters = build_product_exclusion_sql(
+            request.exclude_product_ids
+        )
+
+        query += filter_sql + exclusion_sql
+
         parameters.extend(filter_parameters)
+        parameters.extend(exclusion_parameters)
 
         query += """
             ORDER BY rank DESC, p.product_id

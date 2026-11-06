@@ -3,7 +3,10 @@ from typing import Any
 from psycopg import Connection
 
 from backend.app.database.embedding_config import MODEL_NAME, MODEL_VERSION
-from backend.app.retrieval.filters import build_product_filter_sql
+from backend.app.retrieval.filters import (
+    build_product_exclusion_sql,
+    build_product_filter_sql,
+)
 
 
 def search_similar_products(
@@ -11,8 +14,12 @@ def search_similar_products(
     query_embedding: list[float],
     limit: int = 5,
     filters: dict[str, Any] | None = None,
+    exclude_product_ids: tuple[str, ...] = (),
 ) -> list[dict]:
     filter_sql, filter_parameters = build_product_filter_sql(filters)
+    exclusion_sql, exclusion_parameters = build_product_exclusion_sql(
+        exclude_product_ids
+    )
 
     query = """
         SELECT
@@ -30,7 +37,7 @@ def search_similar_products(
             AND pe.model_version = %s
     """
 
-    query += filter_sql
+    query += filter_sql + exclusion_sql
 
     query += """
         ORDER BY pe.embedding <=> %s::vector
@@ -44,6 +51,7 @@ def search_similar_products(
     ]
 
     parameters.extend(filter_parameters)
+    parameters.extend(exclusion_parameters)
 
     parameters.extend([
         query_embedding,

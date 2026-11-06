@@ -115,6 +115,7 @@ class RetrievalService:
             query=decision.intent.semantic_query,
             limit=resolved_limit,
             filters=decision.intent.filters,
+            exclude_product_ids=context.shown_product_ids,
         )
 
         results = self.hybrid_retriever.retrieve(

@@ -1,6 +1,9 @@
 from psycopg import Connection
 
-from backend.app.retrieval.filters import build_product_filter_sql
+from backend.app.retrieval.filters import (
+    build_product_exclusion_sql,
+    build_product_filter_sql,
+)
 from backend.app.retrieval.models import RetrievalRequest
 
 
@@ -24,7 +27,12 @@ class MetadataEligibilityProvider:
             request.filters
         )
 
-        query += filter_sql
+        exclusion_sql, exclusion_parameters = build_product_exclusion_sql(
+            request.exclude_product_ids
+        )
+
+        query += filter_sql + exclusion_sql
+        parameters.extend(exclusion_parameters)
 
         with self.connection.cursor() as cursor:
             cursor.execute(query, parameters)

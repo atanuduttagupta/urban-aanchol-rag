@@ -192,3 +192,48 @@ def test_hybrid_retrieval_does_not_use_metadata_limit_as_candidate_limit():
     assert "UA-0006" in result_ids
 
     assert results[0].product_id == "UA-0006"
+
+def test_hybrid_retrieval_excludes_previously_displayed_products():
+    eligibility = StubEligibilityProvider([
+        "UA-0001",
+        "UA-0002",
+    ])
+
+    keyword = StubRetriever([
+        product("UA-0001", "Product A", "keyword"),
+        product("UA-0002", "Product B", "keyword"),
+    ])
+
+    semantic = StubRetriever([
+        product("UA-0001", "Product A", "semantic"),
+        product("UA-0002", "Product B", "semantic"),
+    ])
+
+    retriever = HybridProductRetriever(
+        eligibility_provider=eligibility,
+        ranking_retrievers=[
+            keyword,
+            semantic,
+        ],
+    )
+
+    request = RetrievalRequest(
+        query="red saree",
+        limit=5,
+        exclude_product_ids=("UA-0001",),
+    )
+
+    policy = RetrievalPolicy(
+        fusion_window=10,
+        rrf_k=60,
+    )
+
+    results = retriever.retrieve(
+        request,
+        policy,
+    )
+
+    result_ids = [result.product_id for result in results]
+
+    assert "UA-0001" not in result_ids
+    assert "UA-0002" in result_ids

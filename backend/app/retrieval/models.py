@@ -34,11 +34,15 @@ class RetrievalRequest:
 
     `limit` is the maximum number of products returned to the user.
     It must not be used as an internal retrieval or fusion depth.
+
+    `exclude_product_ids` contains product IDs that must be excluded
+    from retrieval, such as products already displayed in a conversation.
     """
 
     query: str
     limit: int = 5
     filters: dict[str, Any] | None = None
+    exclude_product_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
