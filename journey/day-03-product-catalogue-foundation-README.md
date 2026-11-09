@@ -259,8 +259,8 @@ Python `openpyxl` was selected for `.xlsx` catalogue processing.
 
 It is recorded as:
 
-- Direct dependency in `backend/requirements.txt`
-- Exact environment dependency in `backend/requirements-lock.txt`
+- Direct dependency in the root `pyproject.toml`
+- Exact environment dependency in the root `requirements-lock.txt`
 
 Excel processing should remain behind a small internal import/validation layer so the rest of the application does not depend directly on the Excel library.
 

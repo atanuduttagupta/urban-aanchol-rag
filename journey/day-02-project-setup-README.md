@@ -72,22 +72,14 @@ Install the initial backend dependencies with:
 python -m pip install fastapi==0.141.1 uvicorn==0.52.4
 ```
 
-Direct project dependencies are recorded in:
+Project metadata, direct dependencies, and development tools are configured in the root `pyproject.toml`.
 
-```text
-backend/requirements.txt
-```
-
-The complete environment is recorded in:
-
-```text
-backend/requirements-lock.txt
-```
+The complete Python environment is recorded in the root-level `requirements-lock.txt`.
 
 Generate/update the lock file with:
 
 ```powershell
-python -m pip freeze > backend\requirements-lock.txt
+python -m pip freeze | Set-Content requirements-lock.txt
 ```
 
 ## 3. FastAPI Application
