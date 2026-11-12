@@ -88,3 +88,28 @@ def test_metadata_eligibility_without_exclusions():
 
     assert "NOT IN" not in query
     assert parameters == []
+
+
+def test_metadata_eligibility_excludes_sold_products_by_default():
+    connection = MagicMock()
+
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = [
+        ("UA-0001",),
+        ("UA-0002",),
+    ]
+
+    provider = MetadataEligibilityProvider(connection)
+
+    request = RetrievalRequest(
+        query="cotton sarees",
+    )
+
+    eligible_ids = provider.get_eligible_product_ids(request)
+
+    assert eligible_ids == {"UA-0001", "UA-0002"}
+
+    query, parameters = cursor.execute.call_args.args
+
+    assert "p.availability = 'Available'" in query
+    assert parameters == []

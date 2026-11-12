@@ -140,3 +140,30 @@ def test_first_one_reference_is_resolved() -> None:
 
     assert result.status == OrchestrationStatus.READY_FOR_RETRIEVAL
     assert result.resolved_product_id == "UA-0024"
+
+def test_more_results_reuses_previous_retrieval_filters() -> None:
+    from backend.app.retrieval.models import RetrievalIntent
+
+    previous_intent = RetrievalIntent(
+        original_query="Show me cotton sarees",
+        semantic_query="Show me cotton sarees",
+        filters={
+            "category": "Saree",
+            "fabric": "Cotton",
+        },
+    )
+
+    result = prepare_retrieval(
+        query="Show me some more",
+        context=ConversationContext(
+            last_retrieval_intent=previous_intent,
+        ),
+        vocabulary=TEST_VOCABULARY,
+    )
+
+    assert result.status == OrchestrationStatus.READY_FOR_RETRIEVAL
+    assert result.intent is not None
+    assert result.intent.filters == {
+        "category": "Saree",
+        "fabric": "Cotton",
+    }

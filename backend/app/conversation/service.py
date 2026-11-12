@@ -75,6 +75,9 @@ class ConversationService:
         updated_context = replace(
             context,
             previous_query=message,
+            last_retrieval_intent=(
+                retrieval_result.intent or context.last_retrieval_intent
+            ),
         )
 
         updated_context = update_displayed_products(

@@ -1,6 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
+from backend.app.conversation.follow_up_detector import (
+    detect_follow_up_intent,
+)
+from backend.app.conversation.follow_up_models import FollowUpIntentType
 from backend.app.conversation.models import ConversationContext
 from backend.app.conversation.resolution import (
     ResolutionStatus,
@@ -67,6 +71,20 @@ def prepare_retrieval(
         query=query,
         vocabulary=vocabulary,
     )
+
+    follow_up = detect_follow_up_intent(query)
+
+    if (
+        follow_up is not None
+        and follow_up.intent_type == FollowUpIntentType.MORE_RESULTS
+        and context.last_retrieval_intent is not None
+    ):
+        intent = replace(
+            intent,
+            semantic_query=context.last_retrieval_intent.semantic_query,
+            filters=context.last_retrieval_intent.filters,
+            requested_limit=follow_up.requested_limit,
+        )
 
     resolution = resolve_retrieval_ambiguity(
         intent=intent,

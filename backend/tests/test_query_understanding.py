@@ -362,3 +362,20 @@ def test_understand_query_extracts_quantity_from_i_want_request():
     )
 
     assert intent.requested_limit == 4
+
+def test_understand_query_does_not_duplicate_structured_attributes_as_tags():
+    vocabulary = {
+        "category": ["Saree", "Blouse"],
+        "fabric": ["Cotton", "Silk"],
+        "tag": ["cotton", "Saree", "Festive", "Traditional"],
+    }
+
+    intent = understand_query(
+        query="Show me cotton sarees",
+        vocabulary=vocabulary,
+    )
+
+    assert intent.filters == {
+        "category": "Saree",
+        "fabric": "Cotton",
+    }

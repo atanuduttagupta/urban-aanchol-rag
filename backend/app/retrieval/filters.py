@@ -3,12 +3,12 @@ from typing import Any
 EXACT_FILTER_COLUMNS = {
     "category": "p.category",
     "availability": "p.availability",
+    "fabric": "p.fabric",
 }
 
 TEXT_FILTER_COLUMNS = {
     "brand": "p.brand",
     "collection": "p.collection",
-    "fabric": "p.fabric",
     "colour": "p.colour",
     "secondary_colour": "p.secondary_colour",
     "pattern": "p.pattern",
