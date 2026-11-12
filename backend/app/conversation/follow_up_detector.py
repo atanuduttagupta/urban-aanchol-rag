@@ -41,18 +41,21 @@ def detect_follow_up_intent(
             )
 
     more_match = re.search(
-        r"\b(?:show me|give me|find me|show)\s+(\d+)\s+more\b",
+        r"\b(?:show me|give me|find me|show)\s+"
+        r"(?:(\d+)|some|a few)\s+more\b",
         normalized,
     )
     if more_match:
-        count = int(more_match.group(1))
-        if count > 0:
-            return FollowUpIntent(
-                intent_type=FollowUpIntentType.MORE_RESULTS,
-                requested_limit=count,
-                semantic_query=query,
-            )
-        return None
+        count = int(more_match.group(1)) if more_match.group(1) else None
+
+        if count is not None and count <= 0:
+            return None
+
+        return FollowUpIntent(
+            intent_type=FollowUpIntentType.MORE_RESULTS,
+            requested_limit=count,
+            semantic_query=query,
+        )
 
     limit_match = re.search(
         r"\b(?:show me|give me|show)\s+(\d+)\s+instead\b",

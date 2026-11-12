@@ -22,7 +22,7 @@ def test_exact_text_and_range_filters():
 
     assert "p.category = %s" in sql
     assert "p.availability = %s" in sql
-    assert "p.fabric ILIKE %s" in sql
+    assert "p.fabric = %s" in sql
     assert "p.colour ILIKE %s" in sql
     assert "p.price >= %s" in sql
     assert "p.price <= %s" in sql
@@ -30,7 +30,7 @@ def test_exact_text_and_range_filters():
     assert parameters == [
         "Saree",
         "Available",
-        "%Cotton%",
+        "Cotton",
         "%Blue%",
         1500,
         2500,

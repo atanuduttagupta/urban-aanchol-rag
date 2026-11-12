@@ -30,7 +30,36 @@ def understand_query(
         vocabulary=vocabulary,
     )
 
+    # Structured attributes take precedence over duplicate tag values.
+    structured_attributes = {
+        "category",
+        "fabric",
+        "brand",
+        "collection",
+        "colour",
+        "secondary_colour",
+        "pattern",
+        "border",
+    }
+
+    structured_values = {
+        value.strip().casefold()
+        for attribute_name, values in attribute_matches.items()
+        if attribute_name in structured_attributes
+        for value in values
+    }
+
     for attribute_name, values in attribute_matches.items():
+        if attribute_name == "tag":
+            values = [
+                value
+                for value in values
+                if value.strip().casefold() not in structured_values
+            ]
+
+        if not values:
+            continue
+
         if len(values) == 1:
             filters[attribute_name] = values[0]
         else:

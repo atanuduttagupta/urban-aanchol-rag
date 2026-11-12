@@ -31,4 +31,5 @@ def update_displayed_products(
         last_result_ids=latest_ids,
         shown_product_ids=bounded_ids,
         selected_product_id=context.selected_product_id,
+        last_retrieval_intent=context.last_retrieval_intent,
     )

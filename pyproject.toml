@@ -1,0 +1,42 @@
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "urban-aanchol-rag"
+version = "0.1.0"
+description = "Product discovery and RAG-powered shopping assistant for Urban Aanchol"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
+    "openpyxl==3.1.5",
+    "psycopg[binary]>=3.3,<4",
+    "scikit-learn==1.7.2",
+    "sentence-transformers==5.7.0",
+    "python-dotenv==1.2.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.8",
+]
+
+[tool.setuptools.packages.find]
+include = ["backend.app", "backend.app.*"]
+exclude = ["backend.tests", "backend.tests.*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+python_files = ["test_*.py"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]

@@ -13,6 +13,7 @@ from backend.app.query_understanding.retrieval_orchestrator import (
 from backend.app.retrieval.hybrid_retriever import HybridProductRetriever
 from backend.app.retrieval.models import (
     ProductResult,
+    RetrievalIntent,
     RetrievalPolicy,
     RetrievalRequest,
 )
@@ -32,6 +33,7 @@ class RetrievalExecutionResult:
     status: RetrievalExecutionStatus
     results: tuple[ProductResult, ...] = ()
     reason: str | None = None
+    intent: RetrievalIntent | None = None
 
 
 class RetrievalService:
@@ -101,6 +103,7 @@ class RetrievalService:
             return RetrievalExecutionResult(
                 status=RetrievalExecutionStatus.COMPLETED,
                 results=(product,),
+                intent=context.last_retrieval_intent,
             )
 
         if decision.intent is None:
@@ -126,4 +129,5 @@ class RetrievalService:
         return RetrievalExecutionResult(
             status=RetrievalExecutionStatus.COMPLETED,
             results=tuple(results),
+            intent=decision.intent,
         )

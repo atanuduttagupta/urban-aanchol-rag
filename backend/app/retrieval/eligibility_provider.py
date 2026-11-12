@@ -20,7 +20,7 @@ class MetadataEligibilityProvider:
         query = """
             SELECT p.product_id
             FROM products p
-            WHERE 1 = 1
+            WHERE p.availability = 'Available'
         """
 
         filter_sql, parameters = build_product_filter_sql(

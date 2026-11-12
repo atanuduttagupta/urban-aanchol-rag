@@ -18,15 +18,14 @@ def test_exact_and_text_and_price_filters():
     )
 
     assert "p.category = %s" in sql
-    assert "p.fabric ILIKE %s" in sql
+    assert "p.fabric = %s" in sql
     assert "p.price <= %s" in sql
 
     assert parameters == [
         "Saree",
-        "%Cotton%",
+        "Cotton",
         3000,
     ]
-
 
 def test_normalized_text_filter():
     sql, parameters = build_product_filter_sql(

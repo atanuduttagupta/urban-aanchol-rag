@@ -109,3 +109,10 @@ def test_combined_price_and_reference_query_is_not_silently_simplified():
     )
 
     assert intent is None
+
+def test_detects_some_more_results():
+    intent = detect_follow_up_intent("Show me some more")
+
+    assert intent is not None
+    assert intent.intent_type == FollowUpIntentType.MORE_RESULTS
+    assert intent.requested_limit is None
