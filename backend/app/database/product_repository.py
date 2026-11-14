@@ -1,4 +1,4 @@
-from typing import Iterable
+from collections.abc import Iterable
 
 from psycopg import Connection
 from psycopg.types.json import Jsonb
@@ -22,6 +22,7 @@ def insert_products(
             border,
             price,
             availability,
+            stock_quantity,
             description,
             product_url,
             remarks,
@@ -43,6 +44,7 @@ def insert_products(
             %(border)s,
             %(price)s,
             %(availability)s,
+            %(stock_quantity)s,
             %(description)s,
             %(product_url)s,
             %(remarks)s,
@@ -62,7 +64,6 @@ def insert_products(
             pattern = EXCLUDED.pattern,
             border = EXCLUDED.border,
             price = EXCLUDED.price,
-            availability = EXCLUDED.availability,
             description = EXCLUDED.description,
             product_url = EXCLUDED.product_url,
             remarks = EXCLUDED.remarks,
