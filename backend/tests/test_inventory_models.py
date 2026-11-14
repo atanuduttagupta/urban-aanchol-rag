@@ -1,4 +1,3 @@
-
 import pytest
 
 from backend.app.inventory.models import (
