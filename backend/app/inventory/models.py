@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -24,6 +23,14 @@ class CustomerAvailability(StrEnum):
     DISCONTINUED = "Discontinued"
 
 
+class ReservationReason(StrEnum):
+    RESERVATION_ALLOWED = "RESERVATION_ALLOWED"
+    PRODUCT_NOT_FOUND = "PRODUCT_NOT_FOUND"
+    PRODUCT_NOT_AVAILABLE = "PRODUCT_NOT_AVAILABLE"
+    OUT_OF_STOCK = "OUT_OF_STOCK"
+    INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK"
+
+
 @dataclass(frozen=True)
 class InventorySnapshot:
     product_id: str
@@ -46,9 +53,7 @@ class InventorySnapshot:
                 raise ValueError(f"{field_name} cannot be negative.")
 
         if self.reserved_quantity > self.stock_quantity:
-            raise ValueError(
-                "Reserved quantity cannot exceed physical stock."
-            )
+            raise ValueError("Reserved quantity cannot exceed physical stock.")
 
         if not isinstance(self.admin_availability, AdminAvailability):
             raise ValueError("Invalid admin availability status.")
@@ -90,3 +95,13 @@ class InventorySnapshot:
             self.admin_availability == AdminAvailability.AVAILABLE
             and self.available_quantity > 0
         )
+
+
+@dataclass(frozen=True)
+class ReservationDecision:
+    allowed: bool
+    product_id: str
+    requested_quantity: int
+    available_quantity: int | None
+    customer_availability: CustomerAvailability | None
+    reason: ReservationReason
