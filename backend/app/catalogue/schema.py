@@ -15,6 +15,7 @@ EXPECTED_HEADERS = [
     "tags",
     "price",
     "availability",
+    "stock_quantity",
     "launch_date",
     "created_date",
     "last_updated",
@@ -37,8 +38,11 @@ ALLOWED_CATEGORIES = {
 
 
 ALLOWED_AVAILABILITY = {
+    "Planned",
+    "Coming Soon",
     "Available",
-    "Sold",
     "Reserved",
+    "Sold",
     "Inactive",
+    "Discontinued",
 }

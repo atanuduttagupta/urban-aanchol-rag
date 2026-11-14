@@ -43,6 +43,7 @@ def validate_product(product: dict, row_number: int) -> list[str]:
     category = product.get("category")
     price = product.get("price")
     availability = product.get("availability")
+    stock_quantity = product.get("stock_quantity")
 
     if not product_id:
         errors.append(f"Row {row_number}: product_id is required.")
@@ -58,6 +59,28 @@ def validate_product(product: dict, row_number: int) -> list[str]:
     if availability not in ALLOWED_AVAILABILITY:
         errors.append(
             f"Row {row_number}: invalid availability '{availability}'."
+        )
+
+    if stock_quantity is None or (
+        isinstance(stock_quantity, str) and not stock_quantity.strip()
+    ):
+        errors.append(
+            f"Row {row_number}: stock_quantity is required."
+        )
+    elif isinstance(stock_quantity, bool) or not isinstance(
+        stock_quantity, (int, float, Decimal)
+    ):
+        errors.append(
+            f"Row {row_number}: stock_quantity must be a non-negative integer."
+        )
+    elif (
+        not Decimal(str(stock_quantity)).is_finite()
+        or Decimal(str(stock_quantity)) < 0
+        or Decimal(str(stock_quantity))
+        != Decimal(str(stock_quantity)).to_integral_value()
+    ):
+        errors.append(
+            f"Row {row_number}: stock_quantity must be a non-negative integer."
         )
 
     if price is None:

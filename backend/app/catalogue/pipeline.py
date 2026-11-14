@@ -1,3 +1,4 @@
+
 from .config import CATALOGUE_PATH
 from .excel_reader import read_products
 from .normalizer import normalize_products
@@ -8,17 +9,11 @@ def load_catalogue(file_path: str) -> list[dict]:
     """
     Read, validate, and normalize the product catalogue.
 
-    Reserved catalogue rows without a product name are ignored.
-    Active product rows are validated strictly.
+    Empty template rows are skipped by the Excel reader.
+    Every remaining product row is validated strictly.
     """
 
     headers, products = read_products(file_path)
-
-    products = [
-        product
-        for product in products
-        if product.get("product_id") and product.get("product_name")
-    ]
 
     errors = validate_products(products, headers)
 

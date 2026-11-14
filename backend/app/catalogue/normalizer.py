@@ -1,7 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-
 MULTI_VALUE_FIELDS = {
     "occasion",
     "style",
@@ -48,6 +47,14 @@ def normalize_price(value):
     return Decimal(str(value).strip())
 
 
+def normalize_stock_quantity(value):
+    """Normalize stock quantity into an integer."""
+    if value is None:
+        return None
+
+    return int(value)
+
+
 def normalize_date(value):
     """Normalize date/datetime values to a date."""
     if value is None:
@@ -71,6 +78,9 @@ def normalize_product(product: dict) -> dict:
 
         if field in MULTI_VALUE_FIELDS:
             normalized[field] = normalize_multi_value(value)
+
+        elif field == "stock_quantity":
+            normalized[field] = normalize_stock_quantity(value)
 
         elif field == "price":
             normalized[field] = normalize_price(value)
