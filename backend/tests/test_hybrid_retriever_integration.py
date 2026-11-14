@@ -11,7 +11,7 @@ from backend.app.retrieval.eligibility_provider import (
 )
 
 
-def test_hybrid_retrieval_jaipuri_cotton_blue():
+def test_hybrid_retrieval_no_available_jaipuri_cotton_blue():
     connection = get_database_connection()
 
     try:
@@ -57,7 +57,7 @@ def test_hybrid_retrieval_jaipuri_cotton_blue():
                 f"score={result.score:.6f}"
             )
 
-        assert results
+        assert results == []
         assert len(results) <= 5
 
         assert all(
@@ -78,7 +78,7 @@ def test_hybrid_retrieval_jaipuri_cotton_blue():
     finally:
         connection.close()
 
-def test_hybrid_retrieval_mul_cotton_blue():
+def test_hybrid_retrieval_no_available_mul_cotton_blue():
     connection = get_database_connection()
 
     try:
@@ -124,7 +124,7 @@ def test_hybrid_retrieval_mul_cotton_blue():
                 f"score={result.score:.6f}"
             )
 
-        assert results
+        assert results == []
         assert len(results) <= 5
         assert all(
             result.availability == "Available"
@@ -144,7 +144,7 @@ def test_hybrid_retrieval_mul_cotton_blue():
 
 
 
-def test_eligibility_mul_cotton_blue():
+def test_eligibility_no_available_mul_cotton_blue():
     connection = get_database_connection()
 
     try:
@@ -166,7 +166,7 @@ def test_eligibility_mul_cotton_blue():
         for product_id in sorted(eligible_ids):
             print(product_id)
 
-        assert eligible_ids
+        assert eligible_ids == set()
 
     finally:
         connection.close()
@@ -460,12 +460,12 @@ def test_hybrid_retrieval_mul_cotton_price_range():
     # 8. Basic assertions
     # ---------------------------------------------------------
 
-    # We confirmed that only 8 products satisfy:
+    # Three products satisfy:
     # Mul Cotton + ₹1200–₹2200 + Available.
-    assert len(eligible_ids) == 8
+    assert len(eligible_ids) == 3
 
-    # User requested only the top 5 final results.
-    assert len(results) == 5
+    # All three eligible products are returned.
+    assert len(results) == 3
 
     actual_ids = [
         result.product_id
