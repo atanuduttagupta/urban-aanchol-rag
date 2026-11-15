@@ -1,13 +1,11 @@
 from backend.app.database.connection import get_database_connection
 from backend.app.database.embedding_generator import EmbeddingGenerator
-from backend.app.database.knowledge_embedding_text import (
-    build_knowledge_embedding_text,
-)
-
 from backend.app.database.knowledge_embedding_repository import (
     save_knowledge_chunk_embedding,
 )
-
+from backend.app.database.knowledge_embedding_text import (
+    build_knowledge_embedding_text,
+)
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 MODEL_VERSION = "v1"

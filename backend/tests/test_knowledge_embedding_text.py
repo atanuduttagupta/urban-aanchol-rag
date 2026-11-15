@@ -3,7 +3,6 @@ from backend.app.database.knowledge_embedding_text import (
     build_knowledge_embedding_text,
 )
 
-
 connection = get_database_connection()
 
 try:

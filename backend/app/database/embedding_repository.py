@@ -1,8 +1,6 @@
 from uuid import UUID
 
 
-
-
 def save_product_embedding(
     connection,
     product_id: str,

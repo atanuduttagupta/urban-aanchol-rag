@@ -3,7 +3,6 @@ import argparse
 
 from backend.app.database.connection import get_database_connection
 
-
 DEMO_HOLDS = [
     {
         "product_id": "UA-0016",

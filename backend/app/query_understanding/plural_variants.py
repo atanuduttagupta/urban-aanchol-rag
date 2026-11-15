@@ -1,4 +1,3 @@
-import re
 
 
 def _normalize_word(value: str) -> str:

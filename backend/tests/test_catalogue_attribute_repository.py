@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-
 from backend.app.database.catalogue_attribute_repository import (
     get_borders,
     get_brands,
@@ -13,13 +12,6 @@ from backend.app.database.catalogue_attribute_repository import (
     get_occasions,
     get_patterns,
     get_secondary_colours,
-    get_styles,
-    get_tags,
-)
-
-from backend.app.database.catalogue_attribute_repository import (
-    get_moods,
-    get_occasions,
     get_styles,
     get_tags,
 )

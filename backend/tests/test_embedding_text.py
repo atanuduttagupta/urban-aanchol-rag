@@ -1,7 +1,6 @@
 from backend.app.catalogue.pipeline import load_default_catalogue
 from backend.app.database.embedding_text import build_product_embedding_text
 
-
 catalogue = load_default_catalogue()
 
 product = next(

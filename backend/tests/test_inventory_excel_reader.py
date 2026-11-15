@@ -24,7 +24,7 @@ def test_reader_skips_prefilled_id_only_rows_and_keeps_incomplete_products(
     workbook.save(file_path)
     workbook.close()
 
-    headers, products = read_products(str(file_path))
+    _headers, products = read_products(str(file_path))
 
     assert len(products) == 2
     assert products[0]["product_id"] == "UA-0001"

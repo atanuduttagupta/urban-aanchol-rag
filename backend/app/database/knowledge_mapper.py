@@ -1,8 +1,8 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, datetime
 
 
 def map_knowledge_document(document: dict) -> dict:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     return {
         "title": document["title"],

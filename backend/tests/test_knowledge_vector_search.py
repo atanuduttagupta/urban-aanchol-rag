@@ -4,7 +4,6 @@ from backend.app.database.knowledge_vector_search import (
     search_similar_knowledge,
 )
 
-
 QUERY = "How long does delivery take?"
 
 

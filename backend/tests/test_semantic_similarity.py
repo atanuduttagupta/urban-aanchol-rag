@@ -1,6 +1,6 @@
-from backend.app.database.connection import get_database_connection
 from sentence_transformers import SentenceTransformer, util
 
+from backend.app.database.connection import get_database_connection
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 
@@ -58,7 +58,7 @@ def load_products():
 
 def build_product_text(product):
     (
-        product_id,
+        _product_id,
         product_name,
         category,
         fabric,
@@ -103,7 +103,7 @@ def main():
     scores = util.cos_sim(query_embedding, product_embeddings)[0]
 
     ranked_products = sorted(
-        zip(products, scores),
+        zip(products, scores, strict=True),
         key=lambda item: float(item[1]),
         reverse=True,
     )
