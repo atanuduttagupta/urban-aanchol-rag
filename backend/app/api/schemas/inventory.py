@@ -1,8 +1,12 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.inventory.models import (
     AdminAvailability,
     CustomerAvailability,
+    HoldReleaseReason,
+    HoldStatus,
     ReservationReason,
 )
 
@@ -50,3 +54,21 @@ class HoldCreationResponse(BaseModel):
     available_quantity: int | None
     customer_availability: CustomerAvailability | None
     reason: ReservationReason
+
+
+class HoldRecordResponse(BaseModel):
+    hold_id: int
+    product_id: str
+    customer_reference: str | None
+    quantity: int
+    status: HoldStatus
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class HoldReleaseResponse(BaseModel):
+    released: bool
+    hold_id: int
+    product_id: str | None
+    reason: HoldReleaseReason

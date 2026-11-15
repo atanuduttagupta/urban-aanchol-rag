@@ -3,6 +3,8 @@ from backend.app.inventory.inventory_repository import (
 )
 from backend.app.inventory.models import (
     HoldCreationResult,
+    HoldRecord,
+    HoldReleaseResult,
     InventorySnapshot,
     ReservationDecision,
     ReservationReason,
@@ -130,3 +132,25 @@ class InventoryService:
             customer_reference=customer_reference,
             notes=notes,
         )
+
+
+    def list_active_holds(
+        self,
+        product_id: str | None = None,
+    ) -> list[HoldRecord]:
+        if product_id is not None:
+            if not isinstance(product_id, str) or not product_id.strip():
+                raise ValueError("Product ID cannot be empty.")
+
+            product_id = product_id.strip()
+
+        return self.repository.list_active_holds(product_id)
+
+    def release_hold(self, hold_id: int) -> HoldReleaseResult:
+        if isinstance(hold_id, bool) or not isinstance(hold_id, int):
+            raise ValueError("Hold ID must be an integer.")
+
+        if hold_id <= 0:
+            raise ValueError("Hold ID must be greater than zero.")
+
+        return self.repository.release_hold(hold_id)

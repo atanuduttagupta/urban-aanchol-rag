@@ -4,6 +4,10 @@ from psycopg import Connection
 from backend.app.inventory.models import (
     AdminAvailability,
     HoldCreationResult,
+    HoldRecord,
+    HoldReleaseReason,
+    HoldReleaseResult,
+    HoldStatus,
     InventorySnapshot,
     ReservationReason,
 )
@@ -50,6 +54,131 @@ class PostgresInventoryRepository:
             admin_availability=AdminAvailability(row[3]),
         )
 
+    def list_active_holds(
+        self,
+        product_id: str | None = None,
+    ) -> list[HoldRecord]:
+        sql = """
+            SELECT
+                hold_id,
+                product_id,
+                customer_reference,
+                quantity,
+                status,
+                notes,
+                created_at,
+                updated_at
+            FROM product_holds
+            WHERE status = 'Active'
+        """
+
+        params: tuple[str, ...] = ()
+
+        if product_id is not None:
+            sql += " AND product_id = %s"
+            params = (product_id,)
+
+        sql += " ORDER BY created_at DESC, hold_id DESC"
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+
+        return [
+            HoldRecord(
+                hold_id=row[0],
+                product_id=row[1],
+                customer_reference=row[2],
+                quantity=row[3],
+                status=HoldStatus(row[4]),
+                notes=row[5],
+                created_at=row[6],
+                updated_at=row[7],
+            )
+            for row in rows
+        ]
+
+    def release_hold(self, hold_id: int) -> HoldReleaseResult:
+        with self.connection.transaction():
+            with self.connection.cursor() as cursor:
+                # Find the product without locking the hold first.
+                cursor.execute(
+                    """
+                    SELECT product_id
+                    FROM product_holds
+                    WHERE hold_id = %s
+                    """,
+                    (hold_id,),
+                )
+                hold = cursor.fetchone()
+
+                if hold is None:
+                    return HoldReleaseResult(
+                        released=False,
+                        hold_id=hold_id,
+                        product_id=None,
+                        reason=HoldReleaseReason.HOLD_NOT_FOUND,
+                    )
+
+                product_id = hold[0]
+
+                # Follow the same product-first lock order as create_hold().
+                cursor.execute(
+                    """
+                    SELECT product_id
+                    FROM products
+                    WHERE product_id = %s
+                    FOR UPDATE
+                    """,
+                    (product_id,),
+                )
+
+                # Lock and recheck the hold after acquiring the product lock.
+                cursor.execute(
+                    """
+                    SELECT status
+                    FROM product_holds
+                    WHERE hold_id = %s
+                    FOR UPDATE
+                    """,
+                    (hold_id,),
+                )
+                current_hold = cursor.fetchone()
+
+                if current_hold is None:
+                    return HoldReleaseResult(
+                        released=False,
+                        hold_id=hold_id,
+                        product_id=None,
+                        reason=HoldReleaseReason.HOLD_NOT_FOUND,
+                    )
+
+                if current_hold[0] != HoldStatus.ACTIVE.value:
+                    return HoldReleaseResult(
+                        released=False,
+                        hold_id=hold_id,
+                        product_id=product_id,
+                        reason=HoldReleaseReason.HOLD_NOT_ACTIVE,
+                    )
+
+                cursor.execute(
+                    """
+                    UPDATE product_holds
+                    SET
+                        status = 'Released',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE hold_id = %s
+                    """,
+                    (hold_id,),
+                )
+
+                return HoldReleaseResult(
+                    released=True,
+                    hold_id=hold_id,
+                    product_id=product_id,
+                    reason=HoldReleaseReason.HOLD_RELEASED,
+                )
+            
     def create_hold(
         self,
         product_id: str,

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 
@@ -116,3 +117,35 @@ class HoldCreationResult:
     available_quantity: int | None
     customer_availability: CustomerAvailability | None
     reason: ReservationReason
+
+
+class HoldStatus(StrEnum):
+    ACTIVE = "Active"
+    RELEASED = "Released"
+    CONVERTED = "Converted"
+
+
+class HoldReleaseReason(StrEnum):
+    HOLD_RELEASED = "HOLD_RELEASED"
+    HOLD_NOT_FOUND = "HOLD_NOT_FOUND"
+    HOLD_NOT_ACTIVE = "HOLD_NOT_ACTIVE"
+
+
+@dataclass(frozen=True)
+class HoldRecord:
+    hold_id: int
+    product_id: str
+    customer_reference: str | None
+    quantity: int
+    status: HoldStatus
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class HoldReleaseResult:
+    released: bool
+    hold_id: int
+    product_id: str | None
+    reason: HoldReleaseReason

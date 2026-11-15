@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,6 +8,10 @@ from backend.app.inventory.models import (
     AdminAvailability,
     CustomerAvailability,
     HoldCreationResult,
+    HoldRecord,
+    HoldReleaseReason,
+    HoldReleaseResult,
+    HoldStatus,
     InventorySnapshot,
     ReservationReason,
 )
@@ -306,3 +311,78 @@ def test_create_hold_rejects_long_customer_reference(service, repository):
         service.create_hold("UA-0001", 1, "C" * 101)
 
     repository.create_hold.assert_not_called()
+
+
+def test_list_active_holds(service, repository):
+    expected = [
+        HoldRecord(
+            hold_id=101,
+            product_id="UA-0001",
+            customer_reference="CUSTOMER-001",
+            quantity=2,
+            status=HoldStatus.ACTIVE,
+            notes=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    ]
+    repository.list_active_holds.return_value = expected
+
+    result = service.list_active_holds()
+
+    assert result == expected
+    repository.list_active_holds.assert_called_once_with(None)
+
+
+def test_list_active_holds_filters_by_product(service, repository):
+    repository.list_active_holds.return_value = []
+
+    result = service.list_active_holds(" UA-0001 ")
+
+    assert result == []
+    repository.list_active_holds.assert_called_once_with("UA-0001")
+
+
+@pytest.mark.parametrize("product_id", ["", "   ", 123])
+def test_list_active_holds_rejects_invalid_product_id(
+    service, repository, product_id
+):
+    with pytest.raises(ValueError, match="Product ID cannot be empty"):
+        service.list_active_holds(product_id)
+
+    repository.list_active_holds.assert_not_called()
+
+
+def test_release_hold_success(service, repository):
+    expected = HoldReleaseResult(
+        released=True,
+        hold_id=101,
+        product_id="UA-0001",
+        reason=HoldReleaseReason.HOLD_RELEASED,
+    )
+    repository.release_hold.return_value = expected
+
+    result = service.release_hold(101)
+
+    assert result == expected
+    repository.release_hold.assert_called_once_with(101)
+
+
+@pytest.mark.parametrize("hold_id", [0, -1])
+def test_release_hold_rejects_non_positive_id(
+    service, repository, hold_id
+):
+    with pytest.raises(ValueError, match="greater than zero"):
+        service.release_hold(hold_id)
+
+    repository.release_hold.assert_not_called()
+
+
+@pytest.mark.parametrize("hold_id", [True, 1.5, "101", None])
+def test_release_hold_rejects_non_integer_id(
+    service, repository, hold_id
+):
+    with pytest.raises(ValueError, match="must be an integer"):
+        service.release_hold(hold_id)
+
+    repository.release_hold.assert_not_called()

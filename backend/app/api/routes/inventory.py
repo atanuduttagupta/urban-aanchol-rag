@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from backend.app.api.schemas.inventory import (
     CreateHoldRequest,
     HoldCreationResponse,
+    HoldRecordResponse,
+    HoldReleaseResponse,
     InventoryResponse,
     ReservationCheckRequest,
     ReservationDecisionResponse,
@@ -15,7 +17,10 @@ from backend.app.inventory.inventory_repository import (
     PostgresInventoryRepository,
 )
 from backend.app.inventory.inventory_service import InventoryService
-from backend.app.inventory.models import ReservationReason
+from backend.app.inventory.models import (
+    HoldReleaseReason,
+    ReservationReason,
+)
 
 router = APIRouter(prefix="/api/inventory", tags=["Inventory"])
 
@@ -28,6 +33,58 @@ def get_inventory_service() -> Generator[InventoryService, None, None]:
         yield InventoryService(repository)
     finally:
         connection.close()
+
+
+@router.get("/holds", response_model=list[HoldRecordResponse])
+def list_active_holds(
+    service: Annotated[InventoryService, Depends(get_inventory_service)],
+    product_id: str | None = None,
+) -> list[HoldRecordResponse]:
+    holds = service.list_active_holds(product_id)
+
+    return [
+        HoldRecordResponse(
+            hold_id=hold.hold_id,
+            product_id=hold.product_id,
+            customer_reference=hold.customer_reference,
+            quantity=hold.quantity,
+            status=hold.status,
+            notes=hold.notes,
+            created_at=hold.created_at,
+            updated_at=hold.updated_at,
+        )
+        for hold in holds
+    ]
+
+
+@router.post(
+    "/holds/{hold_id}/release",
+    response_model=HoldReleaseResponse,
+)
+def release_hold(
+    hold_id: int,
+    service: Annotated[InventoryService, Depends(get_inventory_service)],
+) -> HoldReleaseResponse:
+    result = service.release_hold(hold_id)
+
+    if result.reason == HoldReleaseReason.HOLD_NOT_FOUND:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hold not found.",
+        )
+
+    if result.reason == HoldReleaseReason.HOLD_NOT_ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Hold is no longer active.",
+        )
+
+    return HoldReleaseResponse(
+        released=result.released,
+        hold_id=result.hold_id,
+        product_id=result.product_id,
+        reason=result.reason,
+    )
 
 
 @router.get("/{product_id}", response_model=InventoryResponse)
