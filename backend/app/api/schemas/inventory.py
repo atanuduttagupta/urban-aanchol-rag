@@ -31,3 +31,22 @@ class ReservationDecisionResponse(BaseModel):
     available_quantity: int | None
     customer_availability: CustomerAvailability | None
     reason: ReservationReason
+
+
+class CreateHoldRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    product_id: str = Field(min_length=1, max_length=50)
+    quantity: int = Field(strict=True, gt=0)
+    customer_reference: str = Field(min_length=1, max_length=100)
+    notes: str | None = None
+
+
+class HoldCreationResponse(BaseModel):
+    created: bool
+    hold_id: int | None
+    product_id: str
+    requested_quantity: int
+    available_quantity: int | None
+    customer_availability: CustomerAvailability | None
+    reason: ReservationReason

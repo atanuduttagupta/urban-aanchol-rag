@@ -2,6 +2,7 @@ from backend.app.inventory.inventory_repository import (
     PostgresInventoryRepository,
 )
 from backend.app.inventory.models import (
+    HoldCreationResult,
     InventorySnapshot,
     ReservationDecision,
     ReservationReason,
@@ -86,4 +87,46 @@ class InventoryService:
             available_quantity=inventory.available_quantity,
             customer_availability=inventory.customer_availability,
             reason=ReservationReason.RESERVATION_ALLOWED,
+        )
+
+
+    def create_hold(
+        self,
+        product_id: str,
+        quantity: int,
+        customer_reference: str,
+        notes: str | None = None,
+    ) -> HoldCreationResult:
+        if not product_id or not product_id.strip():
+            raise ValueError("Product ID cannot be empty.")
+
+        if isinstance(quantity, bool) or not isinstance(quantity, int):
+            raise ValueError("Reservation quantity must be an integer.")
+
+        if quantity <= 0:
+            raise ValueError(
+                "Reservation quantity must be greater than zero."
+            )
+
+        if not isinstance(customer_reference, str):
+            raise ValueError("Customer reference is required.")
+
+        customer_reference = customer_reference.strip()
+
+        if not customer_reference:
+            raise ValueError("Customer reference is required.")
+
+        if len(customer_reference) > 100:
+            raise ValueError(
+                "Customer reference cannot exceed 100 characters."
+            )
+
+        if notes is not None and not isinstance(notes, str):
+            raise ValueError("Notes must be a string.")
+
+        return self.repository.create_hold(
+            product_id=product_id.strip(),
+            quantity=quantity,
+            customer_reference=customer_reference,
+            notes=notes,
         )

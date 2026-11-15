@@ -105,3 +105,14 @@ class ReservationDecision:
     available_quantity: int | None
     customer_availability: CustomerAvailability | None
     reason: ReservationReason
+
+
+@dataclass(frozen=True)
+class HoldCreationResult:
+    created: bool
+    hold_id: int | None
+    product_id: str
+    requested_quantity: int
+    available_quantity: int | None
+    customer_availability: CustomerAvailability | None
+    reason: ReservationReason

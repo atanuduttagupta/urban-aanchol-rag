@@ -5,6 +5,8 @@ import pytest
 from backend.app.inventory.inventory_service import InventoryService
 from backend.app.inventory.models import (
     AdminAvailability,
+    CustomerAvailability,
+    HoldCreationResult,
     InventorySnapshot,
     ReservationReason,
 )
@@ -171,3 +173,136 @@ def test_reservation_decision_product_not_found(service, repository):
     assert decision.available_quantity is None
     assert decision.customer_availability is None
     assert decision.reason == ReservationReason.PRODUCT_NOT_FOUND
+
+
+def test_create_hold_success(service, repository):
+    expected = HoldCreationResult(
+        created=True,
+        hold_id=101,
+        product_id="UA-0001",
+        requested_quantity=2,
+        available_quantity=8,
+        customer_availability=CustomerAvailability.AVAILABLE,
+        reason=ReservationReason.RESERVATION_ALLOWED,
+    )
+    repository.create_hold.return_value = expected
+
+    result = service.create_hold(
+        product_id=" UA-0001 ",
+        quantity=2,
+        customer_reference="  CUSTOMER-001  ",
+        notes="Customer confirmed on WhatsApp",
+    )
+
+    assert result == expected
+    repository.create_hold.assert_called_once_with(
+        product_id="UA-0001",
+        quantity=2,
+        customer_reference="CUSTOMER-001",
+        notes="Customer confirmed on WhatsApp",
+    )
+
+
+def test_create_hold_returns_insufficient_stock(service, repository):
+    expected = HoldCreationResult(
+        created=False,
+        hold_id=None,
+        product_id="UA-0001",
+        requested_quantity=5,
+        available_quantity=2,
+        customer_availability=CustomerAvailability.AVAILABLE,
+        reason=ReservationReason.INSUFFICIENT_STOCK,
+    )
+    repository.create_hold.return_value = expected
+
+    result = service.create_hold(
+        "UA-0001", 5, "CUSTOMER-001"
+    )
+
+    assert result == expected
+    assert result.created is False
+
+
+def test_create_hold_returns_product_not_found(service, repository):
+    expected = HoldCreationResult(
+        created=False,
+        hold_id=None,
+        product_id="UA-9999",
+        requested_quantity=1,
+        available_quantity=None,
+        customer_availability=None,
+        reason=ReservationReason.PRODUCT_NOT_FOUND,
+    )
+    repository.create_hold.return_value = expected
+
+    result = service.create_hold(
+        "UA-9999", 1, "CUSTOMER-001"
+    )
+
+    assert result == expected
+
+
+def test_create_hold_returns_product_not_available(service, repository):
+    expected = HoldCreationResult(
+        created=False,
+        hold_id=None,
+        product_id="UA-0016",
+        requested_quantity=1,
+        available_quantity=2,
+        customer_availability=CustomerAvailability.RESERVED,
+        reason=ReservationReason.PRODUCT_NOT_AVAILABLE,
+    )
+    repository.create_hold.return_value = expected
+
+    result = service.create_hold(
+        "UA-0016", 1, "CUSTOMER-001"
+    )
+
+    assert result == expected
+
+
+@pytest.mark.parametrize("quantity", [0, -1])
+def test_create_hold_rejects_non_positive_quantity(
+    service, repository, quantity
+):
+    with pytest.raises(ValueError, match="greater than zero"):
+        service.create_hold("UA-0001", quantity, "CUSTOMER-001")
+
+    repository.create_hold.assert_not_called()
+
+
+@pytest.mark.parametrize("quantity", [True, 1.5, "2"])
+def test_create_hold_rejects_non_integer_quantity(
+    service, repository, quantity
+):
+    with pytest.raises(ValueError, match="must be an integer"):
+        service.create_hold("UA-0001", quantity, "CUSTOMER-001")
+
+    repository.create_hold.assert_not_called()
+
+
+@pytest.mark.parametrize("product_id", ["", "   "])
+def test_create_hold_rejects_empty_product_id(
+    service, repository, product_id
+):
+    with pytest.raises(ValueError, match="Product ID cannot be empty"):
+        service.create_hold(product_id, 1, "CUSTOMER-001")
+
+    repository.create_hold.assert_not_called()
+
+
+@pytest.mark.parametrize("customer_reference", ["", "   ", None])
+def test_create_hold_rejects_missing_customer_reference(
+    service, repository, customer_reference
+):
+    with pytest.raises(ValueError, match="Customer reference is required"):
+        service.create_hold("UA-0001", 1, customer_reference)
+
+    repository.create_hold.assert_not_called()
+
+
+def test_create_hold_rejects_long_customer_reference(service, repository):
+    with pytest.raises(ValueError, match="100 characters"):
+        service.create_hold("UA-0001", 1, "C" * 101)
+
+    repository.create_hold.assert_not_called()
