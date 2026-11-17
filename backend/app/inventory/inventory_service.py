@@ -91,7 +91,6 @@ class InventoryService:
             reason=ReservationReason.RESERVATION_ALLOWED,
         )
 
-
     def create_hold(
         self,
         product_id: str,
@@ -106,9 +105,7 @@ class InventoryService:
             raise ValueError("Reservation quantity must be an integer.")
 
         if quantity <= 0:
-            raise ValueError(
-                "Reservation quantity must be greater than zero."
-            )
+            raise ValueError("Reservation quantity must be greater than zero.")
 
         if not isinstance(customer_reference, str):
             raise ValueError("Customer reference is required.")
@@ -119,9 +116,7 @@ class InventoryService:
             raise ValueError("Customer reference is required.")
 
         if len(customer_reference) > 100:
-            raise ValueError(
-                "Customer reference cannot exceed 100 characters."
-            )
+            raise ValueError("Customer reference cannot exceed 100 characters.")
 
         if notes is not None and not isinstance(notes, str):
             raise ValueError("Notes must be a string.")
@@ -132,7 +127,6 @@ class InventoryService:
             customer_reference=customer_reference,
             notes=notes,
         )
-
 
     def list_active_holds(
         self,

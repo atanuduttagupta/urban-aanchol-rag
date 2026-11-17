@@ -19,13 +19,15 @@ def create_repository(result):
 
 
 def test_get_inventory_snapshot_with_active_holds():
-    repository, _, cursor = create_repository(("UA-0016", 4, 2, "Reserved"))
+    repository, _, cursor = create_repository(("UA-0016", 4, 2, 0, "Reserved"))
 
     result = repository.get_inventory_snapshot("UA-0016")
 
     assert result is not None
     assert result.product_id == "UA-0016"
     assert result.stock_quantity == 4
+    assert result.held_quantity == 2
+    assert result.ordered_quantity == 0
     assert result.reserved_quantity == 2
     assert result.available_quantity == 2
     assert result.customer_availability == CustomerAvailability.RESERVED
@@ -35,17 +37,43 @@ def test_get_inventory_snapshot_with_active_holds():
     assert cursor.execute.call_args.args[1] == ("UA-0016",)
 
 
-def test_get_inventory_snapshot_without_holds():
-    repository, _, _ = create_repository(("UA-0001", 12, 0, "Available"))
+def test_get_inventory_snapshot_without_reservations():
+    repository, _, _ = create_repository(("UA-0001", 12, 0, 0, "Available"))
 
     result = repository.get_inventory_snapshot("UA-0001")
 
     assert result is not None
     assert result.stock_quantity == 12
+    assert result.held_quantity == 0
+    assert result.ordered_quantity == 0
     assert result.reserved_quantity == 0
     assert result.available_quantity == 12
     assert result.customer_availability == CustomerAvailability.AVAILABLE
     assert result.can_reserve is True
+
+
+def test_get_inventory_snapshot_with_order_commitments():
+    repository, _, _ = create_repository(("UA-0001", 12, 0, 5, "Available"))
+
+    result = repository.get_inventory_snapshot("UA-0001")
+
+    assert result is not None
+    assert result.held_quantity == 0
+    assert result.ordered_quantity == 5
+    assert result.reserved_quantity == 5
+    assert result.available_quantity == 7
+
+
+def test_get_inventory_snapshot_with_holds_and_orders():
+    repository, _, _ = create_repository(("UA-0001", 12, 2, 5, "Available"))
+
+    result = repository.get_inventory_snapshot("UA-0001")
+
+    assert result is not None
+    assert result.held_quantity == 2
+    assert result.ordered_quantity == 5
+    assert result.reserved_quantity == 7
+    assert result.available_quantity == 5
 
 
 def test_get_inventory_snapshot_returns_none_for_missing_product():
@@ -57,12 +85,21 @@ def test_get_inventory_snapshot_returns_none_for_missing_product():
 
 
 @pytest.mark.parametrize(
-    "product_id, stock, reserved, admin_status, expected_available, expected_status",
+    """
+    product_id,
+    stock,
+    held,
+    ordered,
+    admin_status,
+    expected_available,
+    expected_status
+    """,
     [
         (
             "UA-0016",
             4,
             2,
+            0,
             "Reserved",
             2,
             CustomerAvailability.RESERVED,
@@ -71,6 +108,7 @@ def test_get_inventory_snapshot_returns_none_for_missing_product():
             "UA-0017",
             2,
             1,
+            0,
             "Reserved",
             1,
             CustomerAvailability.RESERVED,
@@ -79,40 +117,69 @@ def test_get_inventory_snapshot_returns_none_for_missing_product():
             "UA-0018",
             0,
             0,
+            0,
             "Reserved",
             0,
             CustomerAvailability.RESERVED,
+        ),
+        (
+            "UA-TEST-ORDER",
+            10,
+            2,
+            3,
+            "Available",
+            5,
+            CustomerAvailability.AVAILABLE,
         ),
     ],
 )
 def test_demo_inventory_scenarios(
     product_id,
     stock,
-    reserved,
+    held,
+    ordered,
     admin_status,
     expected_available,
     expected_status,
 ):
-    repository, _, _ = create_repository((product_id, stock, reserved, admin_status))
+    repository, _, _ = create_repository(
+        (product_id, stock, held, ordered, admin_status)
+    )
 
     result = repository.get_inventory_snapshot(product_id)
 
     assert result is not None
     assert result.stock_quantity == stock
-    assert result.reserved_quantity == reserved
+    assert result.held_quantity == held
+    assert result.ordered_quantity == ordered
+    assert result.reserved_quantity == held + ordered
     assert result.available_quantity == expected_available
     assert result.customer_availability == expected_status
-    assert result.can_reserve is False
 
 
-def test_query_uses_only_active_holds():
-    repository, _, cursor = create_repository(("UA-0016", 4, 2, "Reserved"))
+def test_query_accounts_for_active_holds_and_order_commitments():
+    repository, _, cursor = create_repository(("UA-0001", 12, 2, 3, "Available"))
 
-    repository.get_inventory_snapshot("UA-0016")
+    repository.get_inventory_snapshot("UA-0001")
 
     executed_sql = cursor.execute.call_args.args[0]
 
-    assert "status = 'Active'" in executed_sql
-    assert "SUM(quantity)" in executed_sql
+    assert "ph.status = 'Active'" in executed_sql
+    assert "SUM(ph.quantity)" in executed_sql
     assert "LEFT JOIN" in executed_sql
-    assert "GROUP BY product_id" in executed_sql
+    assert "shipment_items" in executed_sql
+    assert "shipments" in executed_sql
+    assert "order_items" in executed_sql
+    assert "orders" in executed_sql
+
+    for status in (
+        "Dispatched",
+        "In Transit",
+        "Delivered",
+        "Failed",
+        "Returned",
+    ):
+        assert f"'{status}'" in executed_sql
+
+    for status in ("Placed", "Confirmed", "Processing"):
+        assert f"'{status}'" in executed_sql

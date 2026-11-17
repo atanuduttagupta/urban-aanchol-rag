@@ -36,7 +36,8 @@ class ReservationReason(StrEnum):
 class InventorySnapshot:
     product_id: str
     stock_quantity: int
-    reserved_quantity: int
+    held_quantity: int
+    ordered_quantity: int
     admin_availability: AdminAvailability
 
     def __post_init__(self) -> None:
@@ -45,7 +46,8 @@ class InventorySnapshot:
 
         for field_name, value in (
             ("stock_quantity", self.stock_quantity),
-            ("reserved_quantity", self.reserved_quantity),
+            ("held_quantity", self.held_quantity),
+            ("ordered_quantity", self.ordered_quantity),
         ):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(f"{field_name} must be an integer.")
@@ -58,6 +60,10 @@ class InventorySnapshot:
 
         if not isinstance(self.admin_availability, AdminAvailability):
             raise ValueError("Invalid admin availability status.")
+
+    @property
+    def reserved_quantity(self) -> int:
+        return self.held_quantity + self.ordered_quantity
 
     @property
     def available_quantity(self) -> int:

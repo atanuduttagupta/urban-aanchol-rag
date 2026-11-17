@@ -1,4 +1,3 @@
-
 from psycopg import Connection
 
 from backend.app.inventory.models import (
@@ -25,18 +24,52 @@ class PostgresInventoryRepository:
             SELECT
                 p.product_id,
                 p.stock_quantity,
-                COALESCE(h.reserved_quantity, 0)::INTEGER,
+
+                COALESCE((
+                    SELECT SUM(ph.quantity)
+                    FROM product_holds ph
+                    WHERE ph.product_id = p.product_id
+                      AND ph.status = 'Active'
+                ), 0)::INTEGER AS held_quantity,
+
+                COALESCE((
+                    SELECT SUM(
+                        GREATEST(
+                            oi.quantity - COALESCE(dispatched.quantity, 0),
+                            0
+                        )
+                    )
+                    FROM order_items oi
+                    JOIN orders o
+                        ON o.order_id = oi.order_id
+                    LEFT JOIN (
+                        SELECT
+                            si.order_item_id,
+                            SUM(si.quantity) AS quantity
+                        FROM shipment_items si
+                        JOIN shipments s
+                            ON s.shipment_id = si.shipment_id
+                        WHERE s.shipment_status IN (
+                            'Dispatched',
+                            'In Transit',
+                            'Delivered',
+                            'Failed',
+                            'Returned'
+                        )
+                        GROUP BY si.order_item_id
+                    ) dispatched
+                        ON dispatched.order_item_id = oi.order_item_id
+                    WHERE oi.product_id = p.product_id
+                      AND o.order_status IN (
+                          'Placed',
+                          'Confirmed',
+                          'Processing'
+                      )
+                ), 0)::INTEGER AS ordered_quantity,
+
                 p.availability
+
             FROM products p
-            LEFT JOIN (
-                SELECT
-                    product_id,
-                    SUM(quantity) AS reserved_quantity
-                FROM product_holds
-                WHERE status = 'Active'
-                GROUP BY product_id
-            ) h
-                ON h.product_id = p.product_id
             WHERE p.product_id = %s
         """
 
@@ -50,8 +83,9 @@ class PostgresInventoryRepository:
         return InventorySnapshot(
             product_id=row[0],
             stock_quantity=row[1],
-            reserved_quantity=row[2],
-            admin_availability=AdminAvailability(row[3]),
+            held_quantity=row[2],
+            ordered_quantity=row[3],
+            admin_availability=AdminAvailability(row[4]),
         )
 
     def list_active_holds(
@@ -178,7 +212,7 @@ class PostgresInventoryRepository:
                     product_id=product_id,
                     reason=HoldReleaseReason.HOLD_RELEASED,
                 )
-            
+
     def create_hold(
         self,
         product_id: str,
@@ -222,20 +256,64 @@ class PostgresInventoryRepository:
                     """,
                     (product_id,),
                 )
-                reserved_quantity = cursor.fetchone()[0]
+                held_quantity = cursor.fetchone()[0]
+
+                # Recalculate outstanding order commitments.
+                cursor.execute(
+                    """
+                    SELECT COALESCE(
+                        SUM(
+                            GREATEST(
+                                oi.quantity
+                                - COALESCE(dispatched.quantity, 0),
+                                0
+                            )
+                        ),
+                        0
+                    )::INTEGER
+                    FROM order_items oi
+                    JOIN orders o
+                        ON o.order_id = oi.order_id
+                    LEFT JOIN (
+                        SELECT
+                            si.order_item_id,
+                            SUM(si.quantity) AS quantity
+                        FROM shipment_items si
+                        JOIN shipments s
+                            ON s.shipment_id = si.shipment_id
+                        WHERE s.shipment_status IN (
+                            'Dispatched',
+                            'In Transit',
+                            'Delivered',
+                            'Failed',
+                            'Returned'
+                        )
+                        GROUP BY si.order_item_id
+                    ) dispatched
+                        ON dispatched.order_item_id = oi.order_item_id
+                    WHERE oi.product_id = %s
+                      AND o.order_status IN (
+                          'Placed',
+                          'Confirmed',
+                          'Processing'
+                      )
+                    """,
+                    (product_id,),
+                )
+                ordered_quantity = cursor.fetchone()[0]
 
                 inventory = InventorySnapshot(
                     product_id=product[0],
                     stock_quantity=product[1],
-                    reserved_quantity=reserved_quantity,
+                    held_quantity=held_quantity,
+                    ordered_quantity=ordered_quantity,
                     admin_availability=AdminAvailability(product[2]),
                 )
 
                 if not inventory.can_reserve:
                     reason = (
                         ReservationReason.OUT_OF_STOCK
-                        if inventory.admin_availability
-                        == AdminAvailability.AVAILABLE
+                        if inventory.admin_availability == AdminAvailability.AVAILABLE
                         else ReservationReason.PRODUCT_NOT_AVAILABLE
                     )
 
@@ -278,9 +356,8 @@ class PostgresInventoryRepository:
                 updated_inventory = InventorySnapshot(
                     product_id=product_id,
                     stock_quantity=inventory.stock_quantity,
-                    reserved_quantity=(
-                        inventory.reserved_quantity + quantity
-                    ),
+                    held_quantity=inventory.held_quantity + quantity,
+                    ordered_quantity=inventory.ordered_quantity,
                     admin_availability=inventory.admin_availability,
                 )
 
@@ -290,8 +367,6 @@ class PostgresInventoryRepository:
                     product_id=product_id,
                     requested_quantity=quantity,
                     available_quantity=updated_inventory.available_quantity,
-                    customer_availability=(
-                        updated_inventory.customer_availability
-                    ),
+                    customer_availability=(updated_inventory.customer_availability),
                     reason=ReservationReason.RESERVATION_ALLOWED,
                 )

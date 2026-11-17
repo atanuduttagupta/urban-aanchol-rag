@@ -31,7 +31,8 @@ def test_get_inventory_returns_snapshot(service, repository):
     snapshot = InventorySnapshot(
         product_id="UA-0001",
         stock_quantity=12,
-        reserved_quantity=0,
+        held_quantity=0,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.AVAILABLE,
     )
     repository.get_inventory_snapshot.return_value = snapshot
@@ -54,18 +55,34 @@ def test_can_reserve_when_quantity_is_available(service, repository):
     repository.get_inventory_snapshot.return_value = InventorySnapshot(
         product_id="UA-0001",
         stock_quantity=12,
-        reserved_quantity=2,
+        held_quantity=2,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.AVAILABLE,
     )
 
     assert service.can_reserve("UA-0001", 5) is True
 
 
+def test_can_reserve_accounts_for_holds_and_orders(service, repository):
+    repository.get_inventory_snapshot.return_value = InventorySnapshot(
+        product_id="UA-0001",
+        stock_quantity=12,
+        held_quantity=2,
+        ordered_quantity=5,
+        admin_availability=AdminAvailability.AVAILABLE,
+    )
+
+    # 12 physical - 2 held - 5 ordered = 5 available.
+    assert service.can_reserve("UA-0001", 5) is True
+    assert service.can_reserve("UA-0001", 6) is False
+
+
 def test_cannot_reserve_when_quantity_exceeds_available(service, repository):
     repository.get_inventory_snapshot.return_value = InventorySnapshot(
         product_id="UA-0001",
         stock_quantity=12,
-        reserved_quantity=10,
+        held_quantity=10,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.AVAILABLE,
     )
 
@@ -76,7 +93,8 @@ def test_cannot_reserve_when_admin_status_is_reserved(service, repository):
     repository.get_inventory_snapshot.return_value = InventorySnapshot(
         product_id="UA-0016",
         stock_quantity=4,
-        reserved_quantity=2,
+        held_quantity=2,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.RESERVED,
     )
 
@@ -111,7 +129,8 @@ def test_reservation_decision_allowed(service, repository):
     repository.get_inventory_snapshot.return_value = InventorySnapshot(
         product_id="UA-0001",
         stock_quantity=12,
-        reserved_quantity=2,
+        held_quantity=2,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.AVAILABLE,
     )
 
@@ -128,7 +147,8 @@ def test_reservation_decision_insufficient_stock(service, repository):
     repository.get_inventory_snapshot.return_value = InventorySnapshot(
         product_id="UA-0001",
         stock_quantity=12,
-        reserved_quantity=10,
+        held_quantity=10,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.AVAILABLE,
     )
 
@@ -143,7 +163,8 @@ def test_reservation_decision_admin_reserved(service, repository):
     repository.get_inventory_snapshot.return_value = InventorySnapshot(
         product_id="UA-0016",
         stock_quantity=4,
-        reserved_quantity=2,
+        held_quantity=2,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.RESERVED,
     )
 
@@ -158,7 +179,8 @@ def test_reservation_decision_out_of_stock(service, repository):
     repository.get_inventory_snapshot.return_value = InventorySnapshot(
         product_id="UA-0003",
         stock_quantity=0,
-        reserved_quantity=0,
+        held_quantity=0,
+        ordered_quantity=0,
         admin_availability=AdminAvailability.AVAILABLE,
     )
 
@@ -220,9 +242,7 @@ def test_create_hold_returns_insufficient_stock(service, repository):
     )
     repository.create_hold.return_value = expected
 
-    result = service.create_hold(
-        "UA-0001", 5, "CUSTOMER-001"
-    )
+    result = service.create_hold("UA-0001", 5, "CUSTOMER-001")
 
     assert result == expected
     assert result.created is False
@@ -240,9 +260,7 @@ def test_create_hold_returns_product_not_found(service, repository):
     )
     repository.create_hold.return_value = expected
 
-    result = service.create_hold(
-        "UA-9999", 1, "CUSTOMER-001"
-    )
+    result = service.create_hold("UA-9999", 1, "CUSTOMER-001")
 
     assert result == expected
 
@@ -259,17 +277,13 @@ def test_create_hold_returns_product_not_available(service, repository):
     )
     repository.create_hold.return_value = expected
 
-    result = service.create_hold(
-        "UA-0016", 1, "CUSTOMER-001"
-    )
+    result = service.create_hold("UA-0016", 1, "CUSTOMER-001")
 
     assert result == expected
 
 
 @pytest.mark.parametrize("quantity", [0, -1])
-def test_create_hold_rejects_non_positive_quantity(
-    service, repository, quantity
-):
+def test_create_hold_rejects_non_positive_quantity(service, repository, quantity):
     with pytest.raises(ValueError, match="greater than zero"):
         service.create_hold("UA-0001", quantity, "CUSTOMER-001")
 
@@ -277,9 +291,7 @@ def test_create_hold_rejects_non_positive_quantity(
 
 
 @pytest.mark.parametrize("quantity", [True, 1.5, "2"])
-def test_create_hold_rejects_non_integer_quantity(
-    service, repository, quantity
-):
+def test_create_hold_rejects_non_integer_quantity(service, repository, quantity):
     with pytest.raises(ValueError, match="must be an integer"):
         service.create_hold("UA-0001", quantity, "CUSTOMER-001")
 
@@ -287,9 +299,7 @@ def test_create_hold_rejects_non_integer_quantity(
 
 
 @pytest.mark.parametrize("product_id", ["", "   "])
-def test_create_hold_rejects_empty_product_id(
-    service, repository, product_id
-):
+def test_create_hold_rejects_empty_product_id(service, repository, product_id):
     with pytest.raises(ValueError, match="Product ID cannot be empty"):
         service.create_hold(product_id, 1, "CUSTOMER-001")
 
@@ -344,9 +354,7 @@ def test_list_active_holds_filters_by_product(service, repository):
 
 
 @pytest.mark.parametrize("product_id", ["", "   ", 123])
-def test_list_active_holds_rejects_invalid_product_id(
-    service, repository, product_id
-):
+def test_list_active_holds_rejects_invalid_product_id(service, repository, product_id):
     with pytest.raises(ValueError, match="Product ID cannot be empty"):
         service.list_active_holds(product_id)
 
@@ -369,9 +377,7 @@ def test_release_hold_success(service, repository):
 
 
 @pytest.mark.parametrize("hold_id", [0, -1])
-def test_release_hold_rejects_non_positive_id(
-    service, repository, hold_id
-):
+def test_release_hold_rejects_non_positive_id(service, repository, hold_id):
     with pytest.raises(ValueError, match="greater than zero"):
         service.release_hold(hold_id)
 
@@ -379,9 +385,7 @@ def test_release_hold_rejects_non_positive_id(
 
 
 @pytest.mark.parametrize("hold_id", [True, 1.5, "101", None])
-def test_release_hold_rejects_non_integer_id(
-    service, repository, hold_id
-):
+def test_release_hold_rejects_non_integer_id(service, repository, hold_id):
     with pytest.raises(ValueError, match="must be an integer"):
         service.release_hold(hold_id)
 
