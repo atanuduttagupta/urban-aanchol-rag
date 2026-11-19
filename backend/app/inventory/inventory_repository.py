@@ -10,6 +10,7 @@ from backend.app.inventory.models import (
     InventorySnapshot,
     ReservationReason,
 )
+from backend.app.inventory.reservation import get_inventory_snapshots
 
 
 class PostgresInventoryRepository:
@@ -20,73 +21,13 @@ class PostgresInventoryRepository:
         self,
         product_id: str,
     ) -> InventorySnapshot | None:
-        sql = """
-            SELECT
-                p.product_id,
-                p.stock_quantity,
-
-                COALESCE((
-                    SELECT SUM(ph.quantity)
-                    FROM product_holds ph
-                    WHERE ph.product_id = p.product_id
-                      AND ph.status = 'Active'
-                ), 0)::INTEGER AS held_quantity,
-
-                COALESCE((
-                    SELECT SUM(
-                        GREATEST(
-                            oi.quantity - COALESCE(dispatched.quantity, 0),
-                            0
-                        )
-                    )
-                    FROM order_items oi
-                    JOIN orders o
-                        ON o.order_id = oi.order_id
-                    LEFT JOIN (
-                        SELECT
-                            si.order_item_id,
-                            SUM(si.quantity) AS quantity
-                        FROM shipment_items si
-                        JOIN shipments s
-                            ON s.shipment_id = si.shipment_id
-                        WHERE s.shipment_status IN (
-                            'Dispatched',
-                            'In Transit',
-                            'Delivered',
-                            'Failed',
-                            'Returned'
-                        )
-                        GROUP BY si.order_item_id
-                    ) dispatched
-                        ON dispatched.order_item_id = oi.order_item_id
-                    WHERE oi.product_id = p.product_id
-                      AND o.order_status IN (
-                          'Placed',
-                          'Confirmed',
-                          'Processing'
-                      )
-                ), 0)::INTEGER AS ordered_quantity,
-
-                p.availability
-
-            FROM products p
-            WHERE p.product_id = %s
-        """
-
         with self.connection.cursor() as cursor:
-            cursor.execute(sql, (product_id,))
-            row = cursor.fetchone()
+            snapshots = get_inventory_snapshots(
+                cursor=cursor,
+                product_ids=(product_id,),
+            )
 
-        if row is None:
-            return None
-
-        return InventorySnapshot(
-            product_id=row[0],
-            stock_quantity=row[1],
-            held_quantity=row[2],
-            ordered_quantity=row[3],
-            admin_availability=AdminAvailability(row[4]),
-        )
+        return snapshots.get(product_id.strip())
 
     def list_active_holds(
         self,
@@ -246,69 +187,24 @@ class PostgresInventoryRepository:
                         reason=ReservationReason.PRODUCT_NOT_FOUND,
                     )
 
-                # Recalculate active holds after acquiring the lock.
-                cursor.execute(
-                    """
-                    SELECT COALESCE(SUM(quantity), 0)::INTEGER
-                    FROM product_holds
-                    WHERE product_id = %s
-                      AND status = 'Active'
-                    """,
-                    (product_id,),
+                # Recalculate inventory after acquiring the product lock.
+                snapshots = get_inventory_snapshots(
+                    cursor=cursor,
+                    product_ids=(product_id,),
                 )
-                held_quantity = cursor.fetchone()[0]
 
-                # Recalculate outstanding order commitments.
-                cursor.execute(
-                    """
-                    SELECT COALESCE(
-                        SUM(
-                            GREATEST(
-                                oi.quantity
-                                - COALESCE(dispatched.quantity, 0),
-                                0
-                            )
-                        ),
-                        0
-                    )::INTEGER
-                    FROM order_items oi
-                    JOIN orders o
-                        ON o.order_id = oi.order_id
-                    LEFT JOIN (
-                        SELECT
-                            si.order_item_id,
-                            SUM(si.quantity) AS quantity
-                        FROM shipment_items si
-                        JOIN shipments s
-                            ON s.shipment_id = si.shipment_id
-                        WHERE s.shipment_status IN (
-                            'Dispatched',
-                            'In Transit',
-                            'Delivered',
-                            'Failed',
-                            'Returned'
-                        )
-                        GROUP BY si.order_item_id
-                    ) dispatched
-                        ON dispatched.order_item_id = oi.order_item_id
-                    WHERE oi.product_id = %s
-                      AND o.order_status IN (
-                          'Placed',
-                          'Confirmed',
-                          'Processing'
-                      )
-                    """,
-                    (product_id,),
-                )
-                ordered_quantity = cursor.fetchone()[0]
+                inventory = snapshots.get(product_id)
 
-                inventory = InventorySnapshot(
-                    product_id=product[0],
-                    stock_quantity=product[1],
-                    held_quantity=held_quantity,
-                    ordered_quantity=ordered_quantity,
-                    admin_availability=AdminAvailability(product[2]),
-                )
+                if inventory is None:
+                    return HoldCreationResult(
+                        created=False,
+                        hold_id=None,
+                        product_id=product_id,
+                        requested_quantity=quantity,
+                        available_quantity=None,
+                        customer_availability=None,
+                        reason=ReservationReason.PRODUCT_NOT_FOUND,
+                    )
 
                 if not inventory.can_reserve:
                     reason = (

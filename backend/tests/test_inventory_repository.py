@@ -11,7 +11,8 @@ from backend.app.inventory.models import CustomerAvailability
 def create_repository(result):
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
-    cursor.fetchone.return_value = result
+
+    cursor.fetchall.return_value = [result] if result is not None else []
 
     repository = PostgresInventoryRepository(connection)
 
@@ -34,7 +35,11 @@ def test_get_inventory_snapshot_with_active_holds():
     assert result.can_reserve is False
 
     cursor.execute.assert_called_once()
-    assert cursor.execute.call_args.args[1] == ("UA-0016",)
+    assert cursor.execute.call_args.args[1] == (
+        ["UA-0016"],
+        ["UA-0016"],
+        ["UA-0016"],
+    )
 
 
 def test_get_inventory_snapshot_without_reservations():
@@ -164,8 +169,8 @@ def test_query_accounts_for_active_holds_and_order_commitments():
 
     executed_sql = cursor.execute.call_args.args[0]
 
-    assert "ph.status = 'Active'" in executed_sql
-    assert "SUM(ph.quantity)" in executed_sql
+    assert "status = 'Active'" in executed_sql
+    assert "SUM(quantity) AS held_quantity" in executed_sql
     assert "LEFT JOIN" in executed_sql
     assert "shipment_items" in executed_sql
     assert "shipments" in executed_sql
