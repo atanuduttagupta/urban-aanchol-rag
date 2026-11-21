@@ -1,4 +1,4 @@
-from psycopg import Connection
+from psycopg import Connection, Cursor
 
 from backend.app.customers.models import Customer
 
@@ -59,10 +59,7 @@ class PostgresCustomerRepository:
         columns = ", ".join(CUSTOMER_DATA_FIELDS)
         placeholders = ", ".join(["%s"] * len(CUSTOMER_DATA_FIELDS))
 
-        values = tuple(
-            customer_data.get(field)
-            for field in CUSTOMER_DATA_FIELDS
-        )
+        values = tuple(customer_data.get(field) for field in CUSTOMER_DATA_FIELDS)
 
         sql = f"""
             INSERT INTO customers ({columns})
@@ -74,6 +71,34 @@ class PostgresCustomerRepository:
             with self.connection.cursor() as cursor:
                 cursor.execute(sql, values)
                 row = cursor.fetchone()
+
+        return customer_from_row(row)
+
+    def get_customer_for_order(
+        self,
+        cursor: Cursor,
+        customer_id: int,
+    ) -> Customer | None:
+        """
+        Retrieve and lock a customer row for order creation.
+
+        The caller owns the cursor and database transaction.
+        FOR SHARE prevents concurrent customer updates until
+        the caller's transaction completes.
+        """
+
+        sql = f"""
+            SELECT {CUSTOMER_COLUMNS}
+            FROM customers
+            WHERE customer_id = %s
+            FOR SHARE
+        """
+
+        cursor.execute(sql, (customer_id,))
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
 
         return customer_from_row(row)
 
@@ -144,9 +169,7 @@ class PostgresCustomerRepository:
         if not updates:
             return self.get_customer(customer_id)
 
-        assignments = ", ".join(
-            f"{field} = %s" for field in updates
-        )
+        assignments = ", ".join(f"{field} = %s" for field in updates)
 
         values = list(updates.values())
         values.append(customer_id)

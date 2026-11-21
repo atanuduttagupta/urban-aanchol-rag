@@ -4,7 +4,12 @@ from decimal import Decimal
 
 import pytest
 
-from backend.app.orders.models import Order, OrderItem, OrderStatus
+from backend.app.orders.models import (
+    Order,
+    OrderCreationResult,
+    OrderItem,
+    OrderStatus,
+)
 
 
 @pytest.fixture
@@ -295,3 +300,30 @@ def test_order_item_is_immutable(order_item_data):
 
     with pytest.raises(FrozenInstanceError):
         item.quantity = 5
+
+
+def test_create_valid_order_creation_result(order_data, order_item_data):
+    order = Order(**order_data)
+    item = OrderItem(**order_item_data)
+
+    result = OrderCreationResult(
+        order=order,
+        items=(item,),
+    )
+
+    assert result.order == order
+    assert result.items == (item,)
+    assert len(result.items) == 1
+
+
+def test_order_creation_result_is_immutable(order_data, order_item_data):
+    order = Order(**order_data)
+    item = OrderItem(**order_item_data)
+
+    result = OrderCreationResult(
+        order=order,
+        items=(item,),
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        result.order = order

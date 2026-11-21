@@ -32,14 +32,16 @@ def create_test_customer(
     repository,
     suffix="001",
 ):
-    return repository.create_customer({
-        "full_name": f"Integration Test Customer {suffix}",
-        "mobile_number": "9876543210",
-        "whatsapp_number": "9876543211",
-        "email": f"customer{suffix}@example.com",
-        "bill_to_address": "Kolkata",
-        "notes": "Integration test",
-    })
+    return repository.create_customer(
+        {
+            "full_name": f"Integration Test Customer {suffix}",
+            "mobile_number": "9876543210",
+            "whatsapp_number": "9876543211",
+            "email": f"customer{suffix}@example.com",
+            "bill_to_address": "Kolkata",
+            "notes": "Integration test",
+        }
+    )
 
 
 def test_create_customer(isolated_repository):
@@ -63,10 +65,12 @@ def test_create_customer_with_optional_fields_omitted(
 ):
     repository, _ = isolated_repository
 
-    customer = repository.create_customer({
-        "full_name": "Minimal Test Customer",
-        "mobile_number": "9876543210",
-    })
+    customer = repository.create_customer(
+        {
+            "full_name": "Minimal Test Customer",
+            "mobile_number": "9876543210",
+        }
+    )
 
     assert customer.full_name == "Minimal Test Customer"
     assert customer.whatsapp_number is None
@@ -116,10 +120,7 @@ def test_list_customers_search_by_name(isolated_repository):
         search="SEARCH-NAME",
     )
 
-    assert any(
-        item.customer_id == customer.customer_id
-        for item in results
-    )
+    assert any(item.customer_id == customer.customer_id for item in results)
 
 
 def test_list_customers_search_by_mobile(isolated_repository):
@@ -131,10 +132,7 @@ def test_list_customers_search_by_mobile(isolated_repository):
         search="9876543210",
     )
 
-    assert any(
-        item.customer_id == customer.customer_id
-        for item in results
-    )
+    assert any(item.customer_id == customer.customer_id for item in results)
 
 
 def test_list_customers_search_by_email(isolated_repository):
@@ -146,10 +144,7 @@ def test_list_customers_search_by_email(isolated_repository):
         search="customerSEARCH-EMAIL@example.com",
     )
 
-    assert any(
-        item.customer_id == customer.customer_id
-        for item in results
-    )
+    assert any(item.customer_id == customer.customer_id for item in results)
 
 
 def test_list_customers_pagination(isolated_repository):
@@ -246,3 +241,31 @@ def test_update_customer_with_no_fields_returns_existing_record(
     )
 
     assert result == created
+
+
+def test_get_customer_for_order_by_id(isolated_repository):
+    repository, connection = isolated_repository
+
+    created = create_test_customer(repository, "ORDER-001")
+
+    with connection.cursor() as cursor:
+        retrieved = repository.get_customer_for_order(
+            cursor,
+            created.customer_id,
+        )
+
+    assert retrieved == created
+
+
+def test_get_unknown_customer_for_order_returns_none(
+    isolated_repository,
+):
+    repository, connection = isolated_repository
+
+    with connection.cursor() as cursor:
+        retrieved = repository.get_customer_for_order(
+            cursor,
+            -1,
+        )
+
+    assert retrieved is None

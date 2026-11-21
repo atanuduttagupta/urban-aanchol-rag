@@ -294,3 +294,9 @@ class ProductOrderSnapshot:
     price: Decimal | None
     availability: str
     stock_quantity: int
+
+
+@dataclass(frozen=True)
+class OrderCreationResult:
+    order: Order
+    items: tuple[OrderItem, ...]
