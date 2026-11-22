@@ -1,5 +1,5 @@
 from dataclasses import FrozenInstanceError
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -31,6 +31,7 @@ def order_data(now):
         "grand_total": Decimal("4900.00"),
         "created_at": now,
         "updated_at": now,
+        "payment_due_at": now + timedelta(hours=24),
     }
 
 
@@ -327,3 +328,24 @@ def test_order_creation_result_is_immutable(order_data, order_item_data):
 
     with pytest.raises(FrozenInstanceError):
         result.order = order
+
+
+def test_order_rejects_timezone_naive_payment_deadline(order_data):
+    order_data["payment_due_at"] = datetime(2026, 11, 22, 10, 0, 0)
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        Order(**order_data)
+
+
+def test_order_rejects_payment_deadline_before_order_date(order_data):
+    order_data["payment_due_at"] = order_data["order_date"] - timedelta(hours=1)
+
+    with pytest.raises(ValueError, match="later than order_date"):
+        Order(**order_data)
+
+
+def test_order_rejects_payment_deadline_equal_to_order_date(order_data):
+    order_data["payment_due_at"] = order_data["order_date"]
+
+    with pytest.raises(ValueError, match="later than order_date"):
+        Order(**order_data)

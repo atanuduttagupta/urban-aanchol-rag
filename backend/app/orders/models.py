@@ -19,6 +19,7 @@ class Order:
     order_number: str
     customer_id: int
     order_date: datetime
+    payment_due_at: datetime
     order_status: OrderStatus
 
     subtotal: Decimal
@@ -65,9 +66,22 @@ class Order:
         if not isinstance(self.order_status, OrderStatus):
             raise ValueError("Invalid order_status")
 
-        for field_name in ("order_date", "created_at", "updated_at"):
-            if not isinstance(getattr(self, field_name), datetime):
+        for field_name in (
+            "order_date",
+            "payment_due_at",
+            "created_at",
+            "updated_at",
+        ):
+            value = getattr(self, field_name)
+
+            if not isinstance(value, datetime):
                 raise ValueError(f"{field_name} must be a datetime")
+
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{field_name} must be timezone-aware")
+
+        if self.payment_due_at <= self.order_date:
+            raise ValueError("payment_due_at must be later than order_date")
 
         if self.expected_delivery_date is not None:
             if type(self.expected_delivery_date) is not date:

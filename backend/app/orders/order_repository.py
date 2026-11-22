@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from psycopg import Connection, Cursor
 
@@ -7,6 +8,11 @@ from backend.app.customers.customer_repository import (
 )
 from backend.app.inventory.models import AdminAvailability
 from backend.app.inventory.reservation import get_inventory_snapshots
+from backend.app.orders.idempotency import (
+    IdempotencyConflictError,
+    calculate_advisory_lock_id,
+    calculate_order_request_hash,
+)
 from backend.app.orders.models import (
     CreateOrderRequest,
     Order,
@@ -22,6 +28,7 @@ ORDER_COLUMNS = """
     order_number,
     customer_id,
     order_date,
+    payment_due_at,
     order_status,
     subtotal,
     discount_amount,
@@ -73,7 +80,7 @@ ORDER_ITEM_COLUMNS = """
 
 def order_from_row(row: tuple) -> Order:
     values = list(row)
-    values[4] = OrderStatus(values[4])
+    values[5] = OrderStatus(values[5])
     return Order(*values)
 
 
@@ -235,6 +242,7 @@ class PostgresOrderRepository:
         request: CreateOrderRequest,
         delivery_charge: Decimal,
         customer_repository: PostgresCustomerRepository,
+        idempotency_key: UUID,
     ) -> OrderCreationResult:
         """Create an order and reserve inventory atomically."""
 
@@ -242,6 +250,15 @@ class PostgresOrderRepository:
             raise ValueError(
                 "Order and customer repositories must share the same connection"
             )
+
+        if not isinstance(idempotency_key, UUID):
+            raise ValueError("idempotency_key must be a UUID")
+
+        request_hash = calculate_order_request_hash(request)
+        lock_id = calculate_advisory_lock_id(
+            request.customer_id,
+            idempotency_key,
+        )
 
         product_ids = tuple(item.product_id for item in request.items)
 
@@ -252,6 +269,67 @@ class PostgresOrderRepository:
 
         with self.connection.transaction():
             with self.connection.cursor() as cursor:
+                # Step 0: Serialize requests using the same customer/key.
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(%s)",
+                    (lock_id,),
+                )
+
+                # Step 0.1: Check whether this request was already processed.
+                cursor.execute(
+                    """
+                    SELECT request_hash, order_id
+                    FROM order_idempotency
+                    WHERE customer_id = %s
+                      AND idempotency_key = %s
+                    """,
+                    (request.customer_id, idempotency_key),
+                )
+
+                existing_idempotency = cursor.fetchone()
+
+                if existing_idempotency is not None:
+                    existing_hash, existing_order_id = existing_idempotency
+
+                    if existing_hash.strip() != request_hash:
+                        raise IdempotencyConflictError(
+                            "Idempotency key was already used "
+                            "with a different order request"
+                        )
+
+                    # Return the original order and its items.
+                    cursor.execute(
+                        f"""
+                        SELECT {ORDER_COLUMNS}
+                        FROM orders
+                        WHERE order_id = %s
+                        """,
+                        (existing_order_id,),
+                    )
+                    existing_order_row = cursor.fetchone()
+
+                    if existing_order_row is None:
+                        raise RuntimeError(
+                            "Idempotency record references a missing order"
+                        )
+
+                    cursor.execute(
+                        f"""
+                        SELECT {ORDER_ITEM_COLUMNS}
+                        FROM order_items
+                        WHERE order_id = %s
+                        ORDER BY order_item_id
+                        """,
+                        (existing_order_id,),
+                    )
+                    existing_item_rows = cursor.fetchall()
+
+                    return OrderCreationResult(
+                        order=order_from_row(existing_order_row),
+                        items=tuple(
+                            order_item_from_row(row) for row in existing_item_rows
+                        ),
+                    )
                 # Step 1: Read hold metadata without locking.
                 # This lets us identify the associated products first.
                 if hold_ids:
@@ -449,11 +527,13 @@ class PostgresOrderRepository:
                         ship_to_contact_name,
                         ship_to_phone,
                         ship_to_address,
-                        notes
+                        notes,
+                        payment_due_at
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        CURRENT_TIMESTAMP + INTERVAL '24 hours'
                     )
                     RETURNING {ORDER_COLUMNS}
                     """,
@@ -564,7 +644,26 @@ class PostgresOrderRepository:
                             "Its status or details have changed."
                         )
 
-                # Step 13: Return the completed order.
+                # Step 13: Save the idempotency record.
+                cursor.execute(
+                    """
+                    INSERT INTO order_idempotency (
+                        customer_id,
+                        idempotency_key,
+                        request_hash,
+                        order_id
+                    )
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        request.customer_id,
+                        idempotency_key,
+                        request_hash,
+                        order_row[0],
+                    ),
+                )
+
+                # Step 14: Return the completed order.
                 return OrderCreationResult(
                     order=order_from_row(order_row),
                     items=tuple(created_items),

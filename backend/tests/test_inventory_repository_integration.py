@@ -55,11 +55,19 @@ def create_test_order(connection, product_id, quantity, order_number):
             INSERT INTO orders (
                 order_number,
                 customer_id,
+                payment_due_at,
                 order_status,
                 subtotal,
                 grand_total
             )
-            VALUES (%s, %s, 'Placed', %s, %s)
+            VALUES (
+                %s,
+                %s,
+                CURRENT_TIMESTAMP + INTERVAL '24 hours',
+                'Placed',
+                %s,
+                %s
+            )
             RETURNING order_id
             """,
             (order_number, customer_id, total, total),

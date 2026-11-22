@@ -1,5 +1,5 @@
 from dataclasses import fields
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -8,11 +8,10 @@ import pytest
 from backend.app.orders.models import Order, OrderItem, OrderStatus
 from backend.app.orders.order_repository import (
     PostgresOrderRepository,
+    ProductOrderSnapshot,
     order_from_row,
     order_item_from_row,
-    ProductOrderSnapshot,
 )
-
 
 
 @pytest.fixture
@@ -44,6 +43,7 @@ def order(now):
         grand_total=Decimal("4900.00"),
         created_at=now,
         updated_at=now,
+        payment_due_at=now + timedelta(hours=24),
     )
 
 
@@ -71,7 +71,7 @@ def cursor(connection):
 
 def order_row(order):
     values = [getattr(order, field.name) for field in fields(Order)]
-    values[4] = values[4].value
+    values[5] = values[5].value
     return tuple(values)
 
 
@@ -84,6 +84,7 @@ def test_order_from_row(order):
 
     assert result == order
     assert result.order_status == OrderStatus.PLACED
+    assert result.payment_due_at == order.payment_due_at
 
 
 def test_order_item_from_row(order_item):
@@ -210,15 +211,19 @@ def test_get_next_order_number_large_value(repository, cursor):
 
 def test_get_products_for_order_success(repository, cursor):
     cursor.fetchall.return_value = [
-        ("UA-0001", "Bengal Cotton Saree", "Saree", "Urban Aanchol",
-         Decimal("2500.00"), "Available", 12),
-        ("UA-0002", "Silk Saree", "Saree", None,
-         Decimal("4500.00"), "Available", 8),
+        (
+            "UA-0001",
+            "Bengal Cotton Saree",
+            "Saree",
+            "Urban Aanchol",
+            Decimal("2500.00"),
+            "Available",
+            12,
+        ),
+        ("UA-0002", "Silk Saree", "Saree", None, Decimal("4500.00"), "Available", 8),
     ]
 
-    result = repository.get_products_for_order(
-        ("UA-0001", "UA-0002")
-    )
+    result = repository.get_products_for_order(("UA-0001", "UA-0002"))
 
     assert len(result) == 2
     assert result["UA-0001"] == ProductOrderSnapshot(
@@ -235,14 +240,10 @@ def test_get_products_for_order_success(repository, cursor):
     cursor.execute.assert_called_once()
 
 
-def test_get_products_for_order_locks_in_sorted_order(
-    repository, cursor
-):
+def test_get_products_for_order_locks_in_sorted_order(repository, cursor):
     cursor.fetchall.return_value = []
 
-    repository.get_products_for_order(
-        ("UA-0002", "UA-0001")
-    )
+    repository.get_products_for_order(("UA-0002", "UA-0001"))
 
     sql, params = cursor.execute.call_args.args
 
@@ -251,28 +252,20 @@ def test_get_products_for_order_locks_in_sorted_order(
     assert params == (["UA-0001", "UA-0002"],)
 
 
-def test_get_products_for_order_omits_missing_products(
-    repository, cursor
-):
+def test_get_products_for_order_omits_missing_products(repository, cursor):
     cursor.fetchall.return_value = [
-        ("UA-0001", "Cotton Saree", "Saree", None,
-         Decimal("2000.00"), "Available", 12),
+        ("UA-0001", "Cotton Saree", "Saree", None, Decimal("2000.00"), "Available", 12),
     ]
 
-    result = repository.get_products_for_order(
-        ("UA-0001", "UA-9999")
-    )
+    result = repository.get_products_for_order(("UA-0001", "UA-9999"))
 
     assert "UA-0001" in result
     assert "UA-9999" not in result
 
 
-def test_get_products_for_order_preserves_null_price(
-    repository, cursor
-):
+def test_get_products_for_order_preserves_null_price(repository, cursor):
     cursor.fetchall.return_value = [
-        ("UA-0001", "Unpriced Saree", "Saree", None,
-         None, "Available", 12),
+        ("UA-0001", "Unpriced Saree", "Saree", None, None, "Available", 12),
     ]
 
     result = repository.get_products_for_order(("UA-0001",))
@@ -280,13 +273,9 @@ def test_get_products_for_order_preserves_null_price(
     assert result["UA-0001"].price is None
 
 
-def test_get_products_for_order_rejects_duplicate_ids(
-    repository, cursor
-):
+def test_get_products_for_order_rejects_duplicate_ids(repository, cursor):
     with pytest.raises(ValueError, match="Duplicate"):
-        repository.get_products_for_order(
-            ("UA-0001", "UA-0001")
-        )
+        repository.get_products_for_order(("UA-0001", "UA-0001"))
 
     cursor.execute.assert_not_called()
 
@@ -301,18 +290,14 @@ def test_get_products_for_order_rejects_duplicate_ids(
         ("UA-0001", "  "),
     ],
 )
-def test_get_products_for_order_rejects_invalid_ids(
-    repository, cursor, product_ids
-):
+def test_get_products_for_order_rejects_invalid_ids(repository, cursor, product_ids):
     with pytest.raises(ValueError):
         repository.get_products_for_order(product_ids)
 
     cursor.execute.assert_not_called()
 
 
-def test_get_products_for_order_rejects_non_tuple_ids(
-    repository, cursor
-):
+def test_get_products_for_order_rejects_non_tuple_ids(repository, cursor):
     with pytest.raises(ValueError):
         repository.get_products_for_order(["UA-0001"])
 

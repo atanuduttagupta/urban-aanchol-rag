@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Barrier
+from uuid import uuid4
 
 import pytest
 from psycopg.errors import RaiseException
@@ -14,6 +15,7 @@ from backend.app.inventory.inventory_repository import (
 )
 from backend.app.inventory.models import AdminAvailability
 from backend.app.inventory.reservation import get_inventory_snapshots
+from backend.app.orders.idempotency import IdempotencyConflictError
 from backend.app.orders.models import (
     CreateOrderRequest,
     OrderItemRequest,
@@ -191,12 +193,39 @@ def test_create_order_success(isolated_repository):
         request=request,
         delivery_charge=Decimal("100.00"),
         customer_repository=customer_repository,
+        idempotency_key=uuid4(),
     )
 
     assert result.order.order_id > 0
     assert result.order.order_number.startswith("UA-ORD-")
     assert result.order.customer_id == customer.customer_id
     assert result.order.order_status == OrderStatus.PLACED
+    # Verify the 24-hour payment deadline.
+    assert result.order.payment_due_at.tzinfo is not None
+
+    assert (
+        result.order.payment_due_at - result.order.order_date
+    ).total_seconds() == 24 * 60 * 60
+
+    # Verify the timestamps persisted in PostgreSQL.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT order_date, payment_due_at
+            FROM orders
+            WHERE order_id = %s
+            """,
+            (result.order.order_id,),
+        )
+        persisted_deadline = cursor.fetchone()
+
+    assert persisted_deadline is not None
+    assert persisted_deadline[0] == result.order.order_date
+    assert persisted_deadline[1] == result.order.payment_due_at
+
+    assert (
+        persisted_deadline[1] - persisted_deadline[0]
+    ).total_seconds() == 24 * 60 * 60
 
     assert result.order.subtotal == product.price
     assert result.order.discount_amount == Decimal("0.00")
@@ -273,6 +302,7 @@ def test_create_order_rejects_unknown_customer(isolated_repository):
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=uuid4(),
         )
 
     # Verify that no order or order items were created.
@@ -333,6 +363,7 @@ def test_create_order_rejects_unavailable_product(isolated_repository):
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=uuid4(),
         )
 
 
@@ -381,6 +412,7 @@ def test_create_order_rejects_product_without_price(isolated_repository):
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=uuid4(),
         )
 
 
@@ -430,6 +462,7 @@ def test_create_order_rejects_insufficient_inventory(isolated_repository):
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=uuid4(),
         )
 
     # Verify that inventory remains unchanged.
@@ -515,6 +548,7 @@ def test_create_order_rejects_hold_owned_by_another_customer(
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=uuid4(),
         )
 
     # Verify the hold remains active and belongs to customer A.
@@ -595,6 +629,7 @@ def test_create_order_rejects_unlinked_hold(isolated_repository):
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=uuid4(),
         )
 
     # The failed conversion must not modify the hold.
@@ -675,6 +710,7 @@ def test_create_order_rejects_released_hold(isolated_repository):
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=uuid4(),
         )
 
     # Verify that the hold remains Released and unconverted.
@@ -764,6 +800,7 @@ def test_create_order_successfully_converts_customer_hold(
         request=request,
         delivery_charge=Decimal("100.00"),
         customer_repository=customer_repository,
+        idempotency_key=uuid4(),
     )
 
     assert result.order.order_status == OrderStatus.PLACED
@@ -883,6 +920,8 @@ def test_create_order_rolls_back_when_hold_conversion_fails(
     )
 
     # The order header and items are inserted before this failure.
+    idempotency_key = uuid4()
+
     with pytest.raises(
         RaiseException,
         match="simulated hold conversion failure",
@@ -891,6 +930,7 @@ def test_create_order_rolls_back_when_hold_conversion_fails(
             request=request,
             delivery_charge=Decimal("100.00"),
             customer_repository=customer_repository,
+            idempotency_key=idempotency_key,
         )
 
     # Verify that the entire order transaction was rolled back.
@@ -900,6 +940,17 @@ def test_create_order_rolls_back_when_hold_conversion_fails(
 
         cursor.execute("SELECT COUNT(*) FROM order_items")
         final_item_count = cursor.fetchone()[0]
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM order_idempotency
+            WHERE customer_id = %s
+              AND idempotency_key = %s
+            """,
+            (customer.customer_id, idempotency_key),
+        )
+        final_idempotency_count = cursor.fetchone()[0]
 
         cursor.execute(
             """
@@ -913,9 +964,463 @@ def test_create_order_rolls_back_when_hold_conversion_fails(
 
     assert final_order_count == initial_order_count
     assert final_item_count == initial_item_count
+    assert final_idempotency_count == 0
 
     assert final_hold == (
         customer.customer_id,
         "Active",
         None,
     )
+
+
+def test_create_order_replays_original_order_for_same_idempotency_key(
+    isolated_repository,
+):
+    repository, connection = isolated_repository
+    customer_repository = PostgresCustomerRepository(connection)
+
+    customer = customer_repository.create_customer(
+        {
+            "full_name": "Idempotency Replay Customer",
+            "mobile_number": "9999991235",
+            "email": "idempotency-replay@example.com",
+            "bill_to_address": "Kolkata",
+        }
+    )
+
+    product_id = "UA-0001"
+    products = repository.get_products_for_order((product_id,))
+    product = products[product_id]
+
+    assert product.price is not None
+    assert product.availability == AdminAvailability.AVAILABLE.value
+
+    with connection.cursor() as cursor:
+        initial_inventory = get_inventory_snapshots(
+            cursor,
+            (product_id,),
+        )[product_id]
+
+    assert initial_inventory.available_quantity >= 1
+
+    request = CreateOrderRequest(
+        customer_id=customer.customer_id,
+        items=(
+            OrderItemRequest(
+                product_id=product_id,
+                quantity=1,
+            ),
+        ),
+    )
+
+    idempotency_key = uuid4()
+
+    first_result = repository.create_order(
+        request=request,
+        delivery_charge=Decimal("100.00"),
+        customer_repository=customer_repository,
+        idempotency_key=idempotency_key,
+    )
+
+    with connection.cursor() as cursor:
+        inventory_after_first = get_inventory_snapshots(
+            cursor,
+            (product_id,),
+        )[product_id]
+
+    second_result = repository.create_order(
+        request=request,
+        delivery_charge=Decimal("100.00"),
+        customer_repository=customer_repository,
+        idempotency_key=idempotency_key,
+    )
+
+    with connection.cursor() as cursor:
+        inventory_after_second = get_inventory_snapshots(
+            cursor,
+            (product_id,),
+        )[product_id]
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM orders
+            WHERE customer_id = %s
+            """,
+            (customer.customer_id,),
+        )
+        order_count = cursor.fetchone()[0]
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM order_idempotency
+            WHERE customer_id = %s
+              AND idempotency_key = %s
+            """,
+            (customer.customer_id, idempotency_key),
+        )
+        idempotency_count = cursor.fetchone()[0]
+
+    assert first_result.order.order_id == second_result.order.order_id
+    assert first_result.order.order_number == second_result.order.order_number
+    assert first_result.items == second_result.items
+
+    assert order_count == 1
+    assert idempotency_count == 1
+
+    assert (
+        inventory_after_first.available_quantity
+        == inventory_after_second.available_quantity
+    )
+    assert inventory_after_first.stock_quantity == inventory_after_second.stock_quantity
+
+
+def test_create_order_rejects_different_request_with_same_idempotency_key(
+    isolated_repository,
+):
+    repository, connection = isolated_repository
+    customer_repository = PostgresCustomerRepository(connection)
+
+    customer = customer_repository.create_customer(
+        {
+            "full_name": "Idempotency Conflict Customer",
+            "mobile_number": "9999991236",
+            "email": "idempotency-conflict@example.com",
+            "bill_to_address": "Kolkata",
+        }
+    )
+
+    request = CreateOrderRequest(
+        customer_id=customer.customer_id,
+        items=(
+            OrderItemRequest(
+                product_id="UA-0001",
+                quantity=1,
+            ),
+        ),
+        notes="Original request",
+    )
+
+    idempotency_key = uuid4()
+
+    first_result = repository.create_order(
+        request=request,
+        delivery_charge=Decimal("100.00"),
+        customer_repository=customer_repository,
+        idempotency_key=idempotency_key,
+    )
+
+    modified_request = CreateOrderRequest(
+        customer_id=customer.customer_id,
+        items=(
+            OrderItemRequest(
+                product_id="UA-0001",
+                quantity=1,
+            ),
+        ),
+        notes="Modified request",
+    )
+
+    with pytest.raises(IdempotencyConflictError):
+        repository.create_order(
+            request=modified_request,
+            delivery_charge=Decimal("100.00"),
+            customer_repository=customer_repository,
+            idempotency_key=idempotency_key,
+        )
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM orders
+            WHERE customer_id = %s
+            """,
+            (customer.customer_id,),
+        )
+        order_count = cursor.fetchone()[0]
+
+        cursor.execute(
+            """
+            SELECT order_id
+            FROM order_idempotency
+            WHERE customer_id = %s
+              AND idempotency_key = %s
+            """,
+            (customer.customer_id, idempotency_key),
+        )
+        idempotency_record = cursor.fetchone()
+
+    assert order_count == 1
+    assert idempotency_record is not None
+    assert idempotency_record[0] == first_result.order.order_id
+
+
+def test_create_order_with_different_keys_creates_separate_orders(
+    isolated_repository,
+):
+    repository, connection = isolated_repository
+    customer_repository = PostgresCustomerRepository(connection)
+
+    customer = customer_repository.create_customer(
+        {
+            "full_name": "Different Keys Customer",
+            "mobile_number": "9999991237",
+            "email": "different-keys@example.com",
+            "bill_to_address": "Kolkata",
+        }
+    )
+
+    request = CreateOrderRequest(
+        customer_id=customer.customer_id,
+        items=(
+            OrderItemRequest(
+                product_id="UA-0001",
+                quantity=1,
+            ),
+        ),
+    )
+
+    first_result = repository.create_order(
+        request=request,
+        delivery_charge=Decimal("100.00"),
+        customer_repository=customer_repository,
+        idempotency_key=uuid4(),
+    )
+
+    second_result = repository.create_order(
+        request=request,
+        delivery_charge=Decimal("100.00"),
+        customer_repository=customer_repository,
+        idempotency_key=uuid4(),
+    )
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM orders
+            WHERE customer_id = %s
+            """,
+            (customer.customer_id,),
+        )
+        order_count = cursor.fetchone()[0]
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM order_idempotency
+            WHERE customer_id = %s
+            """,
+            (customer.customer_id,),
+        )
+        idempotency_count = cursor.fetchone()[0]
+
+    assert first_result.order.order_id != second_result.order.order_id
+    assert first_result.order.order_number != second_result.order.order_number
+    assert order_count == 2
+    assert idempotency_count == 2
+
+
+def test_idempotency_key_is_scoped_to_customer(isolated_repository):
+    repository, connection = isolated_repository
+    customer_repository = PostgresCustomerRepository(connection)
+
+    customer_one = customer_repository.create_customer(
+        {
+            "full_name": "Idempotency Customer One",
+            "mobile_number": "9999991238",
+            "email": "idempotency-customer-one@example.com",
+            "bill_to_address": "Kolkata",
+        }
+    )
+
+    customer_two = customer_repository.create_customer(
+        {
+            "full_name": "Idempotency Customer Two",
+            "mobile_number": "9999991239",
+            "email": "idempotency-customer-two@example.com",
+            "bill_to_address": "Kolkata",
+        }
+    )
+
+    idempotency_key = uuid4()
+
+    request_one = CreateOrderRequest(
+        customer_id=customer_one.customer_id,
+        items=(OrderItemRequest(product_id="UA-0001", quantity=1),),
+    )
+
+    request_two = CreateOrderRequest(
+        customer_id=customer_two.customer_id,
+        items=(OrderItemRequest(product_id="UA-0001", quantity=1),),
+    )
+
+    first_result = repository.create_order(
+        request=request_one,
+        delivery_charge=Decimal("100.00"),
+        customer_repository=customer_repository,
+        idempotency_key=idempotency_key,
+    )
+
+    second_result = repository.create_order(
+        request=request_two,
+        delivery_charge=Decimal("100.00"),
+        customer_repository=customer_repository,
+        idempotency_key=idempotency_key,
+    )
+
+    assert first_result.order.order_id != second_result.order.order_id
+    assert first_result.order.customer_id == customer_one.customer_id
+    assert second_result.order.customer_id == customer_two.customer_id
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM order_idempotency
+            WHERE idempotency_key = %s
+            """,
+            (idempotency_key,),
+        )
+        idempotency_count = cursor.fetchone()[0]
+
+    assert idempotency_count == 2
+
+
+def test_concurrent_same_key_submissions_create_only_one_order():
+    setup_connection = get_database_connection()
+
+    try:
+        customer_repository = PostgresCustomerRepository(setup_connection)
+
+        customer = customer_repository.create_customer(
+            {
+                "full_name": "Concurrent Idempotency Customer",
+                "mobile_number": "9999991240",
+                "email": "concurrent-idempotency@example.com",
+                "bill_to_address": "Kolkata",
+            }
+        )
+    finally:
+        setup_connection.close()
+
+    customer_id = customer.customer_id
+    idempotency_key = uuid4()
+
+    request = CreateOrderRequest(
+        customer_id=customer_id,
+        items=(
+            OrderItemRequest(
+                product_id="UA-0001",
+                quantity=1,
+            ),
+        ),
+    )
+
+    barrier = Barrier(2)
+
+    def submit_order():
+        connection = get_database_connection()
+
+        try:
+            repository = PostgresOrderRepository(connection)
+            customer_repo = PostgresCustomerRepository(connection)
+
+            barrier.wait(timeout=10)
+
+            return repository.create_order(
+                request=request,
+                delivery_charge=Decimal("100.00"),
+                customer_repository=customer_repo,
+                idempotency_key=idempotency_key,
+            )
+        finally:
+            connection.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_one = executor.submit(submit_order)
+            future_two = executor.submit(submit_order)
+
+            result_one = future_one.result(timeout=30)
+            result_two = future_two.result(timeout=30)
+
+        assert result_one.order.order_id == result_two.order.order_id
+        assert result_one.order.order_number == result_two.order.order_number
+        assert result_one.items == result_two.items
+
+        verification_connection = get_database_connection()
+
+        try:
+            with verification_connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM orders
+                    WHERE customer_id = %s
+                    """,
+                    (customer_id,),
+                )
+                order_count = cursor.fetchone()[0]
+
+                cursor.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM order_idempotency
+                    WHERE customer_id = %s
+                      AND idempotency_key = %s
+                    """,
+                    (customer_id, idempotency_key),
+                )
+                idempotency_count = cursor.fetchone()[0]
+
+            assert order_count == 1
+            assert idempotency_count == 1
+        finally:
+            verification_connection.close()
+
+    finally:
+        cleanup_connection = get_database_connection()
+
+        try:
+            with cleanup_connection.transaction():
+                with cleanup_connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        DELETE FROM order_idempotency
+                        WHERE customer_id = %s
+                        """,
+                        (customer_id,),
+                    )
+
+                    cursor.execute(
+                        """
+                        DELETE FROM order_items
+                        WHERE order_id IN (
+                            SELECT order_id
+                            FROM orders
+                            WHERE customer_id = %s
+                        )
+                        """,
+                        (customer_id,),
+                    )
+
+                    cursor.execute(
+                        """
+                        DELETE FROM orders
+                        WHERE customer_id = %s
+                        """,
+                        (customer_id,),
+                    )
+
+                    cursor.execute(
+                        """
+                        DELETE FROM customers
+                        WHERE customer_id = %s
+                        """,
+                        (customer_id,),
+                    )
+        finally:
+            cleanup_connection.close()
