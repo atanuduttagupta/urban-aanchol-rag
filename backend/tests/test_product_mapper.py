@@ -1,28 +1,19 @@
-from pathlib import Path
 
+from backend.app.catalogue.pipeline import load_default_catalogue
 from backend.app.database.product_mapper import (
     PRODUCT_FIELDS,
     map_products_to_database,
 )
-from backend.app.catalogue.pipeline import load_catalogue
-
-
-CATALOGUE_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "catalogue"
-    / "products_dummy_v1.0.xlsx"
-)
 
 
 def main():
-    products = load_catalogue(str(CATALOGUE_PATH))
+    products = load_default_catalogue()
     mapped_products = map_products_to_database(products)
 
     print(f"Products loaded: {len(products)}")
     print(f"Products mapped: {len(mapped_products)}")
 
-    assert len(mapped_products) == 9
+    assert len(mapped_products) == 30
 
     for product in mapped_products:
         assert set(product.keys()) == set(PRODUCT_FIELDS)
@@ -32,6 +23,12 @@ def main():
         assert product["created_at"] is not None
         assert product["updated_at"] is not None
 
+        # Inventory mapping checks
+        assert isinstance(product["stock_quantity"], int)
+        assert not isinstance(product["stock_quantity"], bool)
+        assert product["stock_quantity"] >= 0
+
+        # Existing field exclusions
         assert "image_url" not in product
         assert "video_url" not in product
         assert "occasion" not in product

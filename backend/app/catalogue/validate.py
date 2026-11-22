@@ -1,15 +1,7 @@
-from pathlib import Path
 
+from .config import CATALOGUE_PATH
 from .excel_reader import read_products
 from .validator import validate_products
-
-
-CATALOGUE_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "catalogue"
-    / "products_dummy.xlsx"
-)
 
 
 def main() -> None:

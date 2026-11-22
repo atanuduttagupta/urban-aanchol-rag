@@ -2,7 +2,6 @@ from backend.app.database.connection import get_database_connection
 from backend.app.database.embedding_generator import EmbeddingGenerator
 from backend.app.database.vector_search import search_similar_products
 
-
 QUERY = "Something elegant for a family function"
 
 

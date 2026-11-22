@@ -1,7 +1,7 @@
+
 from pathlib import Path
 
 import openpyxl
-
 
 REQUIRED_HEADERS = {
     "product_id",
@@ -16,6 +16,9 @@ def read_products(file_path: str) -> list[dict]:
 
     The reader locates the header row by looking for required catalogue
     columns rather than assuming that the first row contains headers.
+
+    Rows containing only a prefilled product_id and no other data
+    are treated as empty template rows and skipped.
     """
     path = Path(file_path)
 
@@ -35,7 +38,6 @@ def read_products(file_path: str) -> list[dict]:
             )
 
         worksheet = workbook["Products"]
-
         rows = worksheet.iter_rows(values_only=True)
 
         headers = None
@@ -62,10 +64,23 @@ def read_products(file_path: str) -> list[dict]:
         products = []
 
         for row in rows:
-            if all(value is None for value in row):
+            product = dict(zip(headers, row, strict=False))
+
+            other_values = [
+                value
+                for field, value in product.items()
+                if field != "product_id"
+            ]
+
+            is_empty_row = all(
+                value is None
+                or (isinstance(value, str) and not value.strip())
+                for value in other_values
+            )
+
+            if is_empty_row:
                 continue
 
-            product = dict(zip(headers, row))
             products.append(product)
 
         return headers, products

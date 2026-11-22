@@ -8,7 +8,6 @@ from backend.app.database.knowledge_repository import (
     insert_knowledge_document,
 )
 
-
 DOCUMENT = {
     "title": "Urban Aanchol Order & Policies",
     "document_type": "policy",

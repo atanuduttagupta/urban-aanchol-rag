@@ -5,6 +5,7 @@ from backend.app.retrieval.models import (
     RetrievalRequest,
 )
 
+
 def test_keyword_retrieval_with_filters():
     connection = get_database_connection()
 

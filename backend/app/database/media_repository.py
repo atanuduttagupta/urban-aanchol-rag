@@ -1,4 +1,4 @@
-from typing import Iterable
+from collections.abc import Iterable
 
 from psycopg import Connection
 from psycopg.types.json import Jsonb

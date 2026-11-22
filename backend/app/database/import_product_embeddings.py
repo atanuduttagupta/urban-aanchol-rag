@@ -4,7 +4,6 @@ from backend.app.database.embedding_generator import EmbeddingGenerator
 from backend.app.database.embedding_repository import save_product_embedding
 from backend.app.database.embedding_text import build_product_embedding_text
 
-
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 MODEL_VERSION = "v1"
 

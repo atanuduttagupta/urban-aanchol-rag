@@ -1,17 +1,15 @@
 from backend.app.database.connection import get_database_connection
 from backend.app.database.embedding_generator import EmbeddingGenerator
-from backend.app.retrieval.hybrid_retriever import HybridProductRetriever
-from backend.app.retrieval.keyword_retriever import KeywordProductRetriever
-from backend.app.retrieval.metadata_retriever import MetadataProductRetriever
-from backend.app.retrieval.models import RetrievalRequest
-from backend.app.retrieval.semantic_retriever import SemanticProductRetriever
-from backend.app.retrieval.models import RetrievalPolicy
 from backend.app.retrieval.eligibility_provider import (
     MetadataEligibilityProvider,
 )
+from backend.app.retrieval.hybrid_retriever import HybridProductRetriever
+from backend.app.retrieval.keyword_retriever import KeywordProductRetriever
+from backend.app.retrieval.models import RetrievalPolicy, RetrievalRequest
+from backend.app.retrieval.semantic_retriever import SemanticProductRetriever
 
 
-def test_hybrid_retrieval_jaipuri_cotton_blue():
+def test_hybrid_retrieval_no_available_jaipuri_cotton_blue():
     connection = get_database_connection()
 
     try:
@@ -57,7 +55,7 @@ def test_hybrid_retrieval_jaipuri_cotton_blue():
                 f"score={result.score:.6f}"
             )
 
-        assert results
+        assert results == []
         assert len(results) <= 5
 
         assert all(
@@ -78,7 +76,7 @@ def test_hybrid_retrieval_jaipuri_cotton_blue():
     finally:
         connection.close()
 
-def test_hybrid_retrieval_mul_cotton_blue():
+def test_hybrid_retrieval_no_available_mul_cotton_blue():
     connection = get_database_connection()
 
     try:
@@ -124,7 +122,7 @@ def test_hybrid_retrieval_mul_cotton_blue():
                 f"score={result.score:.6f}"
             )
 
-        assert results
+        assert results == []
         assert len(results) <= 5
         assert all(
             result.availability == "Available"
@@ -144,7 +142,7 @@ def test_hybrid_retrieval_mul_cotton_blue():
 
 
 
-def test_eligibility_mul_cotton_blue():
+def test_eligibility_no_available_mul_cotton_blue():
     connection = get_database_connection()
 
     try:
@@ -166,7 +164,7 @@ def test_eligibility_mul_cotton_blue():
         for product_id in sorted(eligible_ids):
             print(product_id)
 
-        assert eligible_ids
+        assert eligible_ids == set()
 
     finally:
         connection.close()
@@ -426,8 +424,8 @@ def test_hybrid_retrieval_mul_cotton_price_range():
         print(
             f"{final_rank:<6}"
             f"{product_id:<10}"
-            f"{str(k_rank):<10}"
-            f"{str(s_rank):<10}"
+            f"{k_rank!s:<10}"
+            f"{s_rank!s:<10}"
             f"{similarity_text:<14}"
             f"{keyword_rrf_score:<12.6f}"
             f"{semantic_rrf_score:<12.6f}"
@@ -460,12 +458,12 @@ def test_hybrid_retrieval_mul_cotton_price_range():
     # 8. Basic assertions
     # ---------------------------------------------------------
 
-    # We confirmed that only 8 products satisfy:
-    # Mul Cotton + ₹1200–₹2200 + Available.
-    assert len(eligible_ids) == 8
+    # Three products satisfy:
+    # Mul Cotton + INR 1,200 to INR 2,200 + Available.
+    assert len(eligible_ids) == 3
 
-    # User requested only the top 5 final results.
-    assert len(results) == 5
+    # All three eligible products are returned.
+    assert len(results) == 3
 
     actual_ids = [
         result.product_id
@@ -675,8 +673,8 @@ def test_hybrid_retrieval_keyword_and_semantic():
         print(
             f"{final_rank:<6}"
             f"{product_id:<10}"
-            f"{str(k_rank):<10}"
-            f"{str(s_rank):<10}"
+            f"{k_rank!s:<10}"
+            f"{s_rank!s:<10}"
             f"{similarity_text:<14}"
             f"{keyword_rrf:<12.6f}"
             f"{semantic_rrf:<12.6f}"

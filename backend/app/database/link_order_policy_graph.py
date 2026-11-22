@@ -1,6 +1,5 @@
 from backend.app.database.connection import get_database_connection
 
-
 DOCUMENT_TITLE = "Urban Aanchol Order & Policies"
 
 POLICY_ENTITIES = [

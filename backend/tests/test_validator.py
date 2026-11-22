@@ -2,7 +2,6 @@ from backend.app.catalogue.config import CATALOGUE_PATH
 from backend.app.catalogue.excel_reader import read_products
 from backend.app.catalogue.validator import validate_products
 
-
 headers, products = read_products(str(CATALOGUE_PATH))
 
 errors = validate_products(products, headers)

@@ -1,6 +1,6 @@
-from backend.app.database.connection import get_database_connection
 from sentence_transformers import SentenceTransformer, util
 
+from backend.app.database.connection import get_database_connection
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 QUERY = "Something graceful to wear to Puja"
@@ -60,7 +60,7 @@ def load_sarees():
 
 def build_product_text(product):
     (
-        product_id,
+        _product_id,
         product_name,
         category,
         fabric,
@@ -109,7 +109,7 @@ def main():
     )[0]
 
     ranked_products = sorted(
-        zip(products, scores),
+        zip(products, scores, strict=True),
         key=lambda item: float(item[1]),
         reverse=True,
     )

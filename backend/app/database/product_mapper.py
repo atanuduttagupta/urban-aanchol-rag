@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 PRODUCT_FIELDS = (
     "product_id",
@@ -14,6 +13,7 @@ PRODUCT_FIELDS = (
     "border",
     "price",
     "availability",
+    "stock_quantity",
     "description",
     "product_url",
     "remarks",
@@ -25,7 +25,7 @@ PRODUCT_FIELDS = (
 
 
 def map_product_to_database(product: dict) -> dict:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     return {
         "product_id": product.get("product_id"),
@@ -40,6 +40,7 @@ def map_product_to_database(product: dict) -> dict:
         "border": product.get("border"),
         "price": product.get("price"),
         "availability": product.get("availability"),
+        "stock_quantity": product.get("stock_quantity"),
         "description": product.get("description"),
         "product_url": product.get("product_url"),
         "remarks": product.get("remarks"),
