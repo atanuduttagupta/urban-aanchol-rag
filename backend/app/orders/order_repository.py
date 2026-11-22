@@ -8,6 +8,15 @@ from backend.app.customers.customer_repository import (
 )
 from backend.app.inventory.models import AdminAvailability
 from backend.app.inventory.reservation import get_inventory_snapshots
+from backend.app.orders.exceptions import (
+    CustomerNotFoundError,
+    HoldConflictError,
+    HoldNotFoundError,
+    InsufficientInventoryError,
+    ProductNotFoundError,
+    ProductPriceNotConfiguredError,
+    ProductUnavailableError,
+)
 from backend.app.orders.idempotency import (
     IdempotencyConflictError,
     calculate_advisory_lock_id,
@@ -349,7 +358,7 @@ class PostgresOrderRepository:
                     missing_holds = set(hold_ids) - set(initial_holds)
 
                     if missing_holds:
-                        raise ValueError(
+                        raise HoldNotFoundError(
                             "Holds not found: "
                             f"{', '.join(map(str, sorted(missing_holds)))}"
                         )
@@ -358,13 +367,13 @@ class PostgresOrderRepository:
                         hold = initial_holds[hold_id]
 
                         if hold[1] != item.product_id:
-                            raise ValueError(
+                            raise HoldConflictError(
                                 f"Hold {hold_id} does not match "
                                 f"product {item.product_id}"
                             )
 
                         if hold[3] != item.quantity:
-                            raise ValueError(
+                            raise HoldConflictError(
                                 f"Hold {hold_id} quantity does not match the order item"
                             )
 
@@ -374,7 +383,7 @@ class PostgresOrderRepository:
                 missing_products = set(product_ids) - set(products)
 
                 if missing_products:
-                    raise ValueError(
+                    raise ProductNotFoundError(
                         f"Products not found: {', '.join(sorted(missing_products))}"
                     )
 
@@ -385,7 +394,7 @@ class PostgresOrderRepository:
                 )
 
                 if customer is None:
-                    raise ValueError("Customer not found")
+                    raise CustomerNotFoundError("Customer not found")
 
                 # Step 4: Lock and revalidate holds.
                 locked_holds = {}
@@ -406,26 +415,28 @@ class PostgresOrderRepository:
                     locked_holds = {row[0]: row for row in locked_hold_rows}
 
                     if set(locked_holds) != set(hold_ids):
-                        raise ValueError("One or more requested holds no longer exist")
+                        raise HoldNotFoundError(
+                            "One or more requested holds no longer exist"
+                        )
 
                     for hold_id, item in hold_items.items():
                         hold = locked_holds[hold_id]
 
                         if hold[4] != "Active":
-                            raise ValueError(f"Hold {hold_id} is not active")
+                            raise HoldConflictError(f"Hold {hold_id} is not active")
 
                         if hold[2] != request.customer_id:
-                            raise ValueError(
+                            raise HoldConflictError(
                                 f"Hold {hold_id} does not belong to this customer"
                             )
 
                         if hold[1] != item.product_id:
-                            raise ValueError(
+                            raise HoldConflictError(
                                 f"Hold {hold_id} product does not match the order item"
                             )
 
                         if hold[3] != item.quantity:
-                            raise ValueError(
+                            raise HoldConflictError(
                                 f"Hold {hold_id} quantity does not match the order item"
                             )
 
@@ -442,12 +453,12 @@ class PostgresOrderRepository:
                     inventory = inventory_snapshots[item.product_id]
 
                     if product.availability != AdminAvailability.AVAILABLE.value:
-                        raise ValueError(
+                        raise ProductUnavailableError(
                             f"Product {item.product_id} is not available for ordering"
                         )
 
                     if product.price is None:
-                        raise ValueError(
+                        raise ProductPriceNotConfiguredError(
                             f"Product {item.product_id} has no configured price"
                         )
 
@@ -461,7 +472,7 @@ class PostgresOrderRepository:
                     )
 
                     if item.quantity > effective_available:
-                        raise ValueError(
+                        raise InsufficientInventoryError(
                             f"Insufficient available stock for product "
                             f"{item.product_id}. Requested: {item.quantity}, "
                             f"available: {effective_available}"
@@ -639,7 +650,7 @@ class PostgresOrderRepository:
                     converted_hold = cursor.fetchone()
 
                     if converted_hold is None:
-                        raise ValueError(
+                        raise HoldConflictError(
                             f"Could not convert hold {hold_id}. "
                             "Its status or details have changed."
                         )

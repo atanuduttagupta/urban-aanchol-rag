@@ -15,6 +15,15 @@ from backend.app.inventory.inventory_repository import (
 )
 from backend.app.inventory.models import AdminAvailability
 from backend.app.inventory.reservation import get_inventory_snapshots
+from backend.app.orders.exceptions import (
+    CustomerNotFoundError,
+    HoldConflictError,
+    HoldNotFoundError,
+    InsufficientInventoryError,
+    ProductNotFoundError,
+    ProductPriceNotConfiguredError,
+    ProductUnavailableError,
+)
 from backend.app.orders.idempotency import IdempotencyConflictError
 from backend.app.orders.models import (
     CreateOrderRequest,
@@ -297,7 +306,7 @@ def test_create_order_rejects_unknown_customer(isolated_repository):
         ),
     )
 
-    with pytest.raises(ValueError, match="Customer not found"):
+    with pytest.raises(CustomerNotFoundError, match="Customer not found"):
         repository.create_order(
             request=request,
             delivery_charge=Decimal("100.00"),
@@ -315,6 +324,101 @@ def test_create_order_rejects_unknown_customer(isolated_repository):
 
     assert final_order_count == initial_order_count
     assert final_item_count == initial_item_count
+
+
+def test_create_order_rejects_unknown_product(isolated_repository):
+    repository, connection = isolated_repository
+    customer_repository = PostgresCustomerRepository(connection)
+
+    customer = customer_repository.create_customer(
+        {
+            "full_name": "Unknown Product Customer",
+            "mobile_number": "9999991242",
+            "email": "unknown-product@example.com",
+        }
+    )
+
+    request = CreateOrderRequest(
+        customer_id=customer.customer_id,
+        items=(
+            OrderItemRequest(
+                product_id="UA-NONEXISTENT-ORDER-TEST",
+                quantity=1,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        ProductNotFoundError,
+        match="Products not found",
+    ):
+        repository.create_order(
+            request=request,
+            delivery_charge=Decimal("100.00"),
+            customer_repository=customer_repository,
+            idempotency_key=uuid4(),
+        )
+
+    # Verify that no order was created.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM orders WHERE customer_id = %s",
+            (customer.customer_id,),
+        )
+        assert cursor.fetchone()[0] == 0
+
+
+def test_create_order_rejects_unknown_hold(isolated_repository):
+    repository, connection = isolated_repository
+    customer_repository = PostgresCustomerRepository(connection)
+
+    customer = customer_repository.create_customer(
+        {
+            "full_name": "Unknown Hold Customer",
+            "mobile_number": "9999991243",
+            "email": "unknown-hold@example.com",
+        }
+    )
+
+    # Find a positive hold ID that does not exist.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(hold_id), 0) + 1
+            FROM product_holds
+            """
+        )
+        unknown_hold_id = cursor.fetchone()[0]
+
+    request = CreateOrderRequest(
+        customer_id=customer.customer_id,
+        items=(
+            OrderItemRequest(
+                product_id="UA-0001",
+                quantity=1,
+                hold_id=unknown_hold_id,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        HoldNotFoundError,
+        match="Holds not found",
+    ):
+        repository.create_order(
+            request=request,
+            delivery_charge=Decimal("100.00"),
+            customer_repository=customer_repository,
+            idempotency_key=uuid4(),
+        )
+
+    # Verify that no order was created.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM orders WHERE customer_id = %s",
+            (customer.customer_id,),
+        )
+        assert cursor.fetchone()[0] == 0
 
 
 def test_create_order_rejects_unavailable_product(isolated_repository):
@@ -356,7 +460,7 @@ def test_create_order_rejects_unavailable_product(isolated_repository):
     )
 
     with pytest.raises(
-        ValueError,
+        ProductUnavailableError,
         match=f"Product {product_id} is not available for ordering",
     ):
         repository.create_order(
@@ -405,7 +509,7 @@ def test_create_order_rejects_product_without_price(isolated_repository):
     )
 
     with pytest.raises(
-        ValueError,
+        ProductPriceNotConfiguredError,
         match=f"Product {product_id} has no configured price",
     ):
         repository.create_order(
@@ -455,7 +559,7 @@ def test_create_order_rejects_insufficient_inventory(isolated_repository):
     )
 
     with pytest.raises(
-        ValueError,
+        InsufficientInventoryError,
         match="Insufficient available stock",
     ):
         repository.create_order(
@@ -476,6 +580,92 @@ def test_create_order_rejects_insufficient_inventory(isolated_repository):
     assert final_inventory.held_quantity == initial_inventory.held_quantity
     assert final_inventory.ordered_quantity == initial_inventory.ordered_quantity
     assert final_inventory.available_quantity == initial_inventory.available_quantity
+
+
+def test_create_order_validates_inventory_for_every_product(
+    isolated_repository,
+):
+    repository, connection = isolated_repository
+    customer_repository = PostgresCustomerRepository(connection)
+
+    customer = customer_repository.create_customer(
+        {
+            "full_name": "Multi Product Stock Customer",
+            "mobile_number": "9999991241",
+            "email": "multi-product-stock@example.com",
+        }
+    )
+
+    # The first product will have insufficient stock.
+    # The second product will have sufficient stock.
+    product_ids = ("UA-0002", "UA-0001")
+
+    products = repository.get_products_for_order(product_ids)
+
+    for product_id in product_ids:
+        product = products[product_id]
+        assert product.availability == AdminAvailability.AVAILABLE.value
+        assert product.price is not None
+
+    with connection.cursor() as cursor:
+        initial_inventory = get_inventory_snapshots(
+            cursor,
+            product_ids,
+        )
+
+    insufficient_quantity = initial_inventory["UA-0002"].available_quantity + 1
+
+    assert initial_inventory["UA-0001"].available_quantity >= 1
+
+    request = CreateOrderRequest(
+        customer_id=customer.customer_id,
+        items=(
+            OrderItemRequest(
+                product_id="UA-0002",
+                quantity=insufficient_quantity,
+            ),
+            OrderItemRequest(
+                product_id="UA-0001",
+                quantity=1,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        InsufficientInventoryError,
+        match="Insufficient available stock",
+    ):
+        repository.create_order(
+            request=request,
+            delivery_charge=Decimal("100.00"),
+            customer_repository=customer_repository,
+            idempotency_key=uuid4(),
+        )
+
+    # Verify that neither product's inventory was changed.
+    with connection.cursor() as cursor:
+        final_inventory = get_inventory_snapshots(
+            cursor,
+            product_ids,
+        )
+
+    for product_id in product_ids:
+        assert (
+            final_inventory[product_id].stock_quantity
+            == initial_inventory[product_id].stock_quantity
+        )
+        assert (
+            final_inventory[product_id].held_quantity
+            == initial_inventory[product_id].held_quantity
+        )
+        assert (
+            final_inventory[product_id].ordered_quantity
+            == initial_inventory[product_id].ordered_quantity
+        )
+        assert (
+            final_inventory[product_id].available_quantity
+            == initial_inventory[product_id].available_quantity
+        )
 
 
 def test_create_order_rejects_hold_owned_by_another_customer(
@@ -541,7 +731,7 @@ def test_create_order_rejects_hold_owned_by_another_customer(
     )
 
     with pytest.raises(
-        ValueError,
+        HoldConflictError,
         match=f"Hold {hold_id} does not belong to this customer",
     ):
         repository.create_order(
@@ -622,7 +812,7 @@ def test_create_order_rejects_unlinked_hold(isolated_repository):
     )
 
     with pytest.raises(
-        ValueError,
+        HoldConflictError,
         match=f"Hold {hold_id} does not belong to this customer",
     ):
         repository.create_order(
@@ -703,7 +893,7 @@ def test_create_order_rejects_released_hold(isolated_repository):
     )
 
     with pytest.raises(
-        ValueError,
+        HoldConflictError,
         match=f"Hold {hold_id} is not active",
     ):
         repository.create_order(
